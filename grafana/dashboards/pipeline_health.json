@@ -1,0 +1,176 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "agentprobe-pipeline-health",
+    "title": "AgentProbe - Pipeline Health",
+    "tags": ["agentprobe"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Run Status Breakdown",
+        "type": "piechart",
+        "gridPos": {"h": 8, "w": 8, "x": 0, "y": 0},
+        "targets": [
+          {
+            "rawSql": "SELECT status, COUNT(*) AS count FROM eval_runs GROUP BY status",
+            "format": "table"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Conversation Status Breakdown",
+        "type": "piechart",
+        "gridPos": {"h": 8, "w": 8, "x": 8, "y": 0},
+        "targets": [
+          {
+            "rawSql": "SELECT status, COUNT(*) AS count FROM conversations GROUP BY status",
+            "format": "table"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Run Completion Rate",
+        "type": "gauge",
+        "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0},
+        "targets": [
+          {
+            "rawSql": "SELECT ROUND(COUNT(*) FILTER (WHERE status = 'completed')::numeric / NULLIF(COUNT(*), 0) * 100, 1) AS completion_pct FROM eval_runs",
+            "format": "table"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 50},
+                {"color": "green", "value": 80}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Failure Rate Over Time",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "targets": [
+          {
+            "rawSql": "SELECT date_trunc('day', created_at) AS time, COUNT(*) FILTER (WHERE status = 'failed') AS failed, COUNT(*) AS total FROM eval_runs WHERE created_at > $__timeFrom() GROUP BY 1 ORDER BY 1",
+            "format": "time_series"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Conversation Completion Rate by Run",
+        "type": "barchart",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "targets": [
+          {
+            "rawSql": "SELECT er.name AS run_name, ROUND(COUNT(*) FILTER (WHERE c.status = 'completed')::numeric / NULLIF(COUNT(*), 0) * 100, 1) AS completion_pct FROM conversations c JOIN eval_runs er ON c.eval_run_id = er.id GROUP BY er.name ORDER BY er.created_at DESC LIMIT 20",
+            "format": "table"
+          }
+        ],
+        "fieldConfig": {"defaults": {"unit": "percent"}}
+      },
+      {
+        "id": 6,
+        "title": "Avg Processing Time Per Run",
+        "type": "barchart",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+        "targets": [
+          {
+            "rawSql": "SELECT name, ROUND(EXTRACT(EPOCH FROM (completed_at - started_at))::numeric, 1) AS processing_seconds FROM eval_runs WHERE completed_at IS NOT NULL AND started_at IS NOT NULL ORDER BY created_at DESC LIMIT 15",
+            "format": "table"
+          }
+        ],
+        "fieldConfig": {"defaults": {"unit": "s"}}
+      },
+      {
+        "id": 7,
+        "title": "Avg Processing Time Per Conversation",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+        "targets": [
+          {
+            "rawSql": "SELECT date_trunc('day', c.completed_at) AS time, ROUND(AVG(EXTRACT(EPOCH FROM (c.completed_at - c.started_at)))::numeric, 1) AS avg_seconds FROM conversations c WHERE c.completed_at IS NOT NULL AND c.started_at IS NOT NULL AND c.completed_at > $__timeFrom() GROUP BY 1 ORDER BY 1",
+            "format": "time_series"
+          }
+        ],
+        "fieldConfig": {"defaults": {"unit": "s"}}
+      },
+      {
+        "id": 8,
+        "title": "Failed Runs (Recent)",
+        "type": "table",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24},
+        "targets": [
+          {
+            "rawSql": "SELECT er.name, er.status, er.error_message, ac.name AS agent, s.name AS scenario, er.created_at FROM eval_runs er LEFT JOIN agent_configs ac ON er.agent_config_id = ac.id LEFT JOIN scenarios s ON er.scenario_id = s.id WHERE er.status = 'failed' ORDER BY er.created_at DESC LIMIT 10",
+            "format": "table"
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Avg Evaluations Per Run",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 8, "x": 0, "y": 32},
+        "targets": [
+          {
+            "rawSql": "SELECT ROUND(AVG(eval_count)::numeric, 1) AS avg_evals FROM (SELECT c.eval_run_id, COUNT(e.id) AS eval_count FROM conversations c LEFT JOIN evaluations e ON e.conversation_id = c.id GROUP BY c.eval_run_id) sub",
+            "format": "table"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Metrics Coverage",
+        "type": "gauge",
+        "gridPos": {"h": 4, "w": 8, "x": 8, "y": 32},
+        "targets": [
+          {
+            "rawSql": "SELECT ROUND(COUNT(DISTINCT m.conversation_id)::numeric / NULLIF(COUNT(DISTINCT c.id), 0) * 100, 1) AS coverage_pct FROM conversations c LEFT JOIN metrics m ON m.conversation_id = c.id WHERE c.status = 'completed'",
+            "format": "table"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 100,
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 70},
+                {"color": "green", "value": 90}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 11,
+        "title": "Active Scenarios",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 8, "x": 16, "y": 32},
+        "targets": [
+          {
+            "rawSql": "SELECT COUNT(*) AS count FROM scenarios WHERE is_active = true",
+            "format": "table"
+          }
+        ]
+      }
+    ],
+    "schemaVersion": 39,
+    "version": 1
+  }
+}

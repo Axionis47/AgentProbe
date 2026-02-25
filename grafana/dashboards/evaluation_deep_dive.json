@@ -1,0 +1,165 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "agentprobe-eval-deep-dive",
+    "title": "AgentProbe - Evaluation Deep Dive",
+    "tags": ["agentprobe"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Score Distribution by Dimension",
+        "type": "barchart",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [
+          {
+            "rawSql": "SELECT key AS dimension, ROUND(AVG(value::numeric), 2) AS avg_score FROM evaluations, jsonb_each_text(scores) WHERE overall_score IS NOT NULL GROUP BY key ORDER BY avg_score DESC",
+            "format": "table"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 4},
+                {"color": "green", "value": 7}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Evaluator Type Comparison",
+        "type": "barchart",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [
+          {
+            "rawSql": "SELECT evaluator_type, ROUND(AVG(overall_score)::numeric, 2) AS avg_score, COUNT(*) AS count FROM evaluations WHERE overall_score IS NOT NULL GROUP BY evaluator_type ORDER BY avg_score DESC",
+            "format": "table"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Score Trend Over Time",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
+        "targets": [
+          {
+            "rawSql": "SELECT date_trunc('day', e.created_at) AS time, evaluator_type, ROUND(AVG(overall_score)::numeric, 2) AS avg_score FROM evaluations e WHERE e.created_at > $__timeFrom() AND overall_score IS NOT NULL GROUP BY 1, 2 ORDER BY 1",
+            "format": "time_series"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Top 5 Performing Agents",
+        "type": "table",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+        "targets": [
+          {
+            "rawSql": "SELECT ac.name AS agent, ac.model, ROUND(AVG(e.overall_score)::numeric, 2) AS avg_score, COUNT(DISTINCT c.id) AS conversations FROM evaluations e JOIN conversations c ON e.conversation_id = c.id JOIN eval_runs er ON c.eval_run_id = er.id JOIN agent_configs ac ON er.agent_config_id = ac.id WHERE e.overall_score IS NOT NULL GROUP BY ac.name, ac.model ORDER BY avg_score DESC LIMIT 5",
+            "format": "table"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Bottom 5 Performing Agents",
+        "type": "table",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+        "targets": [
+          {
+            "rawSql": "SELECT ac.name AS agent, ac.model, ROUND(AVG(e.overall_score)::numeric, 2) AS avg_score, COUNT(DISTINCT c.id) AS conversations FROM evaluations e JOIN conversations c ON e.conversation_id = c.id JOIN eval_runs er ON c.eval_run_id = er.id JOIN agent_configs ac ON er.agent_config_id = ac.id WHERE e.overall_score IS NOT NULL GROUP BY ac.name, ac.model ORDER BY avg_score ASC LIMIT 5",
+            "format": "table"
+          }
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Score Distribution",
+        "type": "histogram",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+        "targets": [
+          {
+            "rawSql": "SELECT overall_score FROM evaluations WHERE overall_score IS NOT NULL",
+            "format": "table"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "custom": {
+              "fillOpacity": 80
+            }
+          }
+        },
+        "options": {
+          "bucketSize": 0.5
+        }
+      },
+      {
+        "id": 7,
+        "title": "Per-Dimension Scores by Agent",
+        "type": "table",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+        "targets": [
+          {
+            "rawSql": "SELECT ac.name AS agent, key AS dimension, ROUND(AVG(value::numeric), 2) AS avg_score FROM evaluations e JOIN conversations c ON e.conversation_id = c.id JOIN eval_runs er ON c.eval_run_id = er.id JOIN agent_configs ac ON er.agent_config_id = ac.id, jsonb_each_text(e.scores) WHERE e.overall_score IS NOT NULL GROUP BY ac.name, key ORDER BY ac.name, key",
+            "format": "table"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Human vs Model Judge Agreement",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 8, "x": 0, "y": 32},
+        "targets": [
+          {
+            "rawSql": "SELECT COALESCE(ROUND(CORR(h.overall_score, a.overall_score)::numeric, 3), 0) AS correlation FROM evaluations h JOIN evaluations a ON h.conversation_id = a.conversation_id WHERE h.evaluator_type = 'human' AND a.evaluator_type = 'model_judge'",
+            "format": "table"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 0.5},
+                {"color": "green", "value": 0.75}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 9,
+        "title": "Total Evaluations",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 8, "x": 8, "y": 32},
+        "targets": [
+          {
+            "rawSql": "SELECT COUNT(*) AS total FROM evaluations",
+            "format": "table"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "Evaluations by Type",
+        "type": "piechart",
+        "gridPos": {"h": 4, "w": 8, "x": 16, "y": 32},
+        "targets": [
+          {
+            "rawSql": "SELECT evaluator_type, COUNT(*) AS count FROM evaluations GROUP BY evaluator_type",
+            "format": "table"
+          }
+        ]
+      }
+    ],
+    "schemaVersion": 39,
+    "version": 1
+  }
+}
