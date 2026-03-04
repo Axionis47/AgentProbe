@@ -21,6 +21,8 @@ Welcome to AgentProbe. Use the sidebar to navigate between pages:
 6. **Scenarios** — Manage test scenarios (create, edit, deactivate)
 7. **Agent Comparison** — Compare agent performance side-by-side with charts
 8. **Metrics Dashboard** — Visualize automated metrics with histograms and correlations
+9. **ELO Rankings** — Pairwise agent comparison with ELO ratings
+10. **Calibration & Reliability** — Judge calibration curves and interrater agreement
 """)
 
 # API health check

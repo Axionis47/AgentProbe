@@ -102,6 +102,28 @@ with tab_browse:
 with tab_create:
     st.subheader("Create Scenario")
 
+    # Format examples (shown above the form for reference)
+    with st.expander("Reference Answer Format (for reference-based evaluation)"):
+        st.markdown("""
+Add `expected_response` to each turn in the **Turns Template** to enable
+reference-based evaluation (ROUGE-1, ROUGE-L, exact-match scoring).
+""")
+        st.code(json.dumps([
+            {"role": "user", "content": "What is the return policy?"},
+            {"role": "user", "content": "Can I return after 30 days?",
+             "expected_response": "Returns are accepted within 60 days of purchase with a valid receipt."},
+        ], indent=2), language="json")
+
+    with st.expander("Expected Tool Sequence Format (for trajectory evaluation)"):
+        st.markdown("""
+Add `expected_tool_sequence` to the **Constraints** JSON to enable trajectory
+evaluation (precision, recall, order-matching of tool calls).
+""")
+        st.code(json.dumps({
+            "expected_tool_sequence": ["search_knowledge_base", "lookup_order", "create_ticket"],
+            "max_turns": 10,
+        }, indent=2), language="json")
+
     with st.form("create_scenario"):
         name = st.text_input("Name")
         description = st.text_area("Description")

@@ -135,6 +135,33 @@ class AgentProbeClient:
         r.raise_for_status()
         return r.json()
 
+    # Pairwise Comparison
+    def create_pairwise_comparison(self, data: dict[str, Any]) -> dict[str, Any]:
+        r = self.client.post(self._url("/evaluations/pairwise"), json=data)
+        r.raise_for_status()
+        return r.json()
+
+    # Rankings
+    def get_rankings(self, scenario_id: str | None = None) -> dict[str, Any]:
+        params = {}
+        if scenario_id:
+            params["scenario_id"] = scenario_id
+        r = self.client.get(self._url("/evaluations/rankings"), params=params)
+        r.raise_for_status()
+        return r.json()
+
+    # Reliability
+    def get_reliability(self, eval_run_id: str) -> dict[str, Any]:
+        r = self.client.get(self._url("/evaluations/reliability"), params={"eval_run_id": eval_run_id})
+        r.raise_for_status()
+        return r.json()
+
+    # Calibration
+    def get_calibration(self, eval_run_id: str) -> dict[str, Any]:
+        r = self.client.get(self._url("/evaluations/calibration"), params={"eval_run_id": eval_run_id})
+        r.raise_for_status()
+        return r.json()
+
     # Search
     def semantic_search(self, query: str, **filters: Any) -> dict[str, Any]:
         r = self.client.post(self._url("/search/semantic"), json={"query": query, **filters})

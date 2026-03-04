@@ -18,9 +18,11 @@ from app.evaluation.model_judge import ModelJudgeEvaluator
 from app.evaluation.rubric_grader import RubricGraderEvaluator
 from app.evaluation.types import DEFAULT_DIMENSIONS, EvaluationResult, MetricValue, RubricDimension
 from app.models.conversation import Conversation
+from app.models.eval_run import EvalRun
 from app.models.evaluation import Evaluation
 from app.models.metric import Metric
 from app.models.rubric import Rubric
+from app.models.scenario import Scenario
 
 logger = structlog.get_logger()
 
@@ -103,6 +105,53 @@ class EvaluationService:
                 conversation_id=conversation_id,
                 error=str(e),
             )
+
+        # 2.5 Reference Evaluator (only if scenario has expected_response fields)
+        try:
+            scenario = await self._load_scenario_for_conversation(conversation)
+            if scenario and self._has_reference_answers(scenario):
+                from app.evaluation.reference_evaluator import ReferenceEvaluator
+
+                ref_evaluator = ReferenceEvaluator()
+                enriched_turns = self._enrich_turns_with_references(turns, scenario)
+                ref_result = await ref_evaluator.evaluate(enriched_turns, dimensions)
+                eval_record = await self._store_evaluation(
+                    conversation_id=conversation_id,
+                    rubric_id=rubric_id,
+                    result=ref_result,
+                )
+                evaluations.append(eval_record)
+                logger.info(
+                    "reference_evaluator_completed",
+                    conversation_id=conversation_id,
+                    overall_score=ref_result.overall_score,
+                )
+        except Exception as e:
+            logger.error("reference_evaluator_failed", conversation_id=conversation_id, error=str(e))
+
+        # 2.7 Trajectory Evaluator (only if scenario has expected_tool_sequence)
+        try:
+            if not scenario:
+                scenario = await self._load_scenario_for_conversation(conversation)
+            if scenario and self._has_expected_trajectory(scenario):
+                from app.evaluation.trajectory_evaluator import TrajectoryEvaluator
+
+                expected_seq = (scenario.constraints or {}).get("expected_tool_sequence", [])
+                traj_evaluator = TrajectoryEvaluator(expected_tool_sequence=expected_seq)
+                traj_result = await traj_evaluator.evaluate(turns, dimensions)
+                eval_record = await self._store_evaluation(
+                    conversation_id=conversation_id,
+                    rubric_id=rubric_id,
+                    result=traj_result,
+                )
+                evaluations.append(eval_record)
+                logger.info(
+                    "trajectory_evaluator_completed",
+                    conversation_id=conversation_id,
+                    overall_score=traj_result.overall_score,
+                )
+        except Exception as e:
+            logger.error("trajectory_evaluator_failed", conversation_id=conversation_id, error=str(e))
 
         # 3. Automated Metrics
         try:
@@ -218,3 +267,51 @@ class EvaluationService:
             )
             self.db.add(metric)
         await self.db.flush()
+
+    # ------------------------------------------------------------------
+    # Scenario helpers for reference + trajectory evaluators
+    # ------------------------------------------------------------------
+
+    async def _load_scenario_for_conversation(
+        self, conversation: Conversation,
+    ) -> Scenario | None:
+        """Load the scenario associated with a conversation's eval run."""
+        result = await self.db.execute(
+            select(EvalRun).where(EvalRun.id == conversation.eval_run_id)
+        )
+        eval_run = result.scalar_one_or_none()
+        if not eval_run:
+            return None
+
+        result = await self.db.execute(
+            select(Scenario).where(Scenario.id == eval_run.scenario_id)
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    def _has_reference_answers(scenario: Scenario) -> bool:
+        """Check if any turn in the scenario template has expected_response."""
+        turns = scenario.turns_template or []
+        return any(t.get("expected_response") for t in turns)
+
+    @staticmethod
+    def _has_expected_trajectory(scenario: Scenario) -> bool:
+        """Check if the scenario constraints contain expected_tool_sequence."""
+        constraints = scenario.constraints or {}
+        seq = constraints.get("expected_tool_sequence", [])
+        return isinstance(seq, list) and len(seq) > 0
+
+    @staticmethod
+    def _enrich_turns_with_references(
+        actual_turns: list[dict[str, Any]],
+        scenario: Scenario,
+    ) -> list[dict[str, Any]]:
+        """Copy expected_response from scenario template into actual turns."""
+        template = scenario.turns_template or []
+        enriched = []
+        for i, turn in enumerate(actual_turns):
+            enriched_turn = dict(turn)
+            if i < len(template) and "expected_response" in template[i]:
+                enriched_turn["expected_response"] = template[i]["expected_response"]
+            enriched.append(enriched_turn)
+        return enriched

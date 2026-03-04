@@ -34,6 +34,9 @@ class EvaluatorType(str, Enum):
     MODEL_JUDGE = "model_judge"
     RUBRIC_GRADER = "rubric_grader"
     HUMAN = "human"
+    REFERENCE_BASED = "reference_based"
+    TRAJECTORY = "trajectory"
+    PAIRWISE_JUDGE = "pairwise_judge"
 
 
 class Difficulty(str, Enum):

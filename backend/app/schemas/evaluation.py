@@ -33,3 +33,66 @@ class EvaluationResponse(BaseModel):
 class EvaluationListResponse(BaseModel):
     total: int
     items: list[EvaluationResponse]
+
+
+# --- Pairwise Comparison Schemas ---
+
+
+class PairwiseComparisonRequest(BaseModel):
+    conversation_id_a: str
+    conversation_id_b: str
+    rubric_id: str | None = None
+
+
+class PairwiseComparisonResponse(BaseModel):
+    match_id: str
+    winner: str
+    conversation_id_a: str
+    conversation_id_b: str
+    reasoning: str
+    dimension_preferences: dict[str, str]
+    confidence: float
+    evaluations: list[EvaluationResponse]
+
+
+# --- Rankings Schemas ---
+
+
+class AgentRanking(BaseModel):
+    agent_config_id: str
+    agent_name: str | None = None
+    elo_rating: float
+    matches_played: int
+    wins: int
+    losses: int
+    draws: int
+
+
+class RankingsResponse(BaseModel):
+    scenario_id: str | None
+    rankings: list[AgentRanking]
+    total_matches: int
+
+
+# --- Reliability Schema ---
+
+
+class ReliabilityResponse(BaseModel):
+    alpha: float
+    num_items: int
+    num_raters: int
+    per_dimension_alpha: dict[str, float]
+
+
+# --- Calibration Schema ---
+
+
+class CalibrationResponse(BaseModel):
+    pearson_r: float
+    spearman_rho: float
+    mae: float
+    rmse: float
+    bias: float
+    n: int
+    calibration_curve: list[dict[str, Any]]
+    per_dimension: dict[str, dict[str, float]]
