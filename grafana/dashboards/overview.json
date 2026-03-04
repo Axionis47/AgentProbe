@@ -1,0 +1,98 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "agentprobe-overview",
+    "title": "AgentProbe - Overview",
+    "tags": ["agentprobe"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Eval Runs Over Time",
+        "type": "timeseries",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [
+          {
+            "rawSql": "SELECT date_trunc('day', created_at) AS time, COUNT(*) AS runs FROM eval_runs WHERE created_at > $__timeFrom() GROUP BY 1 ORDER BY 1",
+            "format": "time_series"
+          }
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Average Scores by Agent",
+        "type": "barchart",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [
+          {
+            "rawSql": "SELECT ac.name AS agent, ROUND(AVG(e.overall_score)::numeric, 2) AS avg_score FROM evaluations e JOIN conversations c ON e.conversation_id = c.id JOIN eval_runs er ON c.eval_run_id = er.id JOIN agent_configs ac ON er.agent_config_id = ac.id GROUP BY 1 ORDER BY 2 DESC",
+            "format": "table"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Total Eval Runs",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 8},
+        "targets": [
+          {
+            "rawSql": "SELECT COUNT(*) AS total FROM eval_runs",
+            "format": "table"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Completed Runs",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 8},
+        "targets": [
+          {
+            "rawSql": "SELECT COUNT(*) AS completed FROM eval_runs WHERE status = 'completed'",
+            "format": "table"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Average Overall Score",
+        "type": "gauge",
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 8},
+        "targets": [
+          {
+            "rawSql": "SELECT ROUND(AVG(overall_score)::numeric, 2) AS avg_score FROM evaluations WHERE overall_score IS NOT NULL",
+            "format": "table"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "min": 0,
+            "max": 5,
+            "thresholds": {
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 2.5},
+                {"color": "green", "value": 4}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "Active Agents",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 8},
+        "targets": [
+          {
+            "rawSql": "SELECT COUNT(*) AS agents FROM agent_configs WHERE is_active = true",
+            "format": "table"
+          }
+        ]
+      }
+    ],
+    "schemaVersion": 39,
+    "version": 1
+  }
+}
