@@ -24,10 +24,10 @@ class EvaluationResponse(BaseModel):
     overall_score: float | None
     reasoning: str | None
     per_turn_scores: list[dict[str, Any]] | None
-    metadata: dict[str, Any]
+    metadata: dict[str, Any] = Field(default_factory=dict, alias="metadata_")
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}
 
 
 class EvaluationListResponse(BaseModel):

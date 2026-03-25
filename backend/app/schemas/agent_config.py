@@ -36,12 +36,12 @@ class AgentConfigResponse(BaseModel):
     temperature: float
     max_tokens: int
     tools: list[dict[str, Any]]
-    metadata: dict[str, Any]
+    metadata: dict[str, Any] = Field(default_factory=dict, alias="metadata_")
     is_active: bool
     created_at: datetime
     updated_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}
 
 
 class AgentConfigListResponse(BaseModel):

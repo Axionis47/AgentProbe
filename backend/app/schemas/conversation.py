@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ConversationResponse(BaseModel):
@@ -16,12 +16,12 @@ class ConversationResponse(BaseModel):
     total_latency_ms: int
     status: str
     error_message: str | None
-    metadata: dict[str, Any]
+    metadata: dict[str, Any] = Field(default_factory=dict, alias="metadata_")
     started_at: datetime | None
     completed_at: datetime | None
     created_at: datetime
 
-    model_config = {"from_attributes": True}
+    model_config = {"from_attributes": True, "populate_by_name": True}
 
 
 class ConversationListResponse(BaseModel):
