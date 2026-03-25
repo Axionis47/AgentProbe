@@ -7,13 +7,30 @@ from datetime import datetime, timezone
 
 import structlog
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.db.session import async_session_factory
+from app.config import settings
 from app.models.eval_run import EvalRun
 from app.services.agent_simulation import AgentSimulationService
 from app.workers.celery_app import celery_app
 
 logger = structlog.get_logger()
+
+
+def _make_session_factory() -> async_sessionmaker[AsyncSession]:
+    """Create a fresh engine + session factory per task invocation.
+
+    Celery forks workers, so the global engine from app.db.session
+    is bound to the parent's event loop and cannot be reused.
+    """
+    engine = create_async_engine(
+        settings.database_url,
+        echo=settings.debug,
+        pool_size=5,
+        max_overflow=5,
+        pool_pre_ping=True,
+    )
+    return async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
 @celery_app.task(bind=True, name="run_simulation", max_retries=2, default_retry_delay=30)
@@ -26,7 +43,8 @@ def run_simulation(self: object, eval_run_id: str) -> dict[str, str]:
     logger.info("simulation_task_started", eval_run_id=eval_run_id)
 
     async def _run() -> str:
-        async with async_session_factory() as session:
+        session_factory = _make_session_factory()
+        async with session_factory() as session:
             try:
                 service = AgentSimulationService(db=session)
                 await service.run_eval(eval_run_id)
@@ -51,7 +69,7 @@ def run_simulation(self: object, eval_run_id: str) -> dict[str, str]:
                     if eval_run and eval_run.status != "failed":
                         eval_run.status = "failed"
                         eval_run.error_message = str(exc)[:2000]
-                        eval_run.completed_at = datetime.now(timezone.utc)
+                        eval_run.completed_at = datetime.utcnow()
                         await session.commit()
                 except Exception as inner_exc:
                     logger.error(

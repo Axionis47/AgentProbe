@@ -7,8 +7,9 @@ from datetime import datetime, timezone
 
 import structlog
 from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.db.session import async_session_factory
+from app.config import settings
 from app.models.conversation import Conversation
 from app.models.eval_run import EvalRun
 from app.models.evaluation import Evaluation
@@ -16,6 +17,18 @@ from app.services.evaluation_service import EvaluationService
 from app.workers.celery_app import celery_app
 
 logger = structlog.get_logger()
+
+
+def _make_session_factory() -> async_sessionmaker[AsyncSession]:
+    """Create a fresh engine + session factory per task invocation."""
+    engine = create_async_engine(
+        settings.database_url,
+        echo=settings.debug,
+        pool_size=5,
+        max_overflow=5,
+        pool_pre_ping=True,
+    )
+    return async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
 @celery_app.task(bind=True, name="evaluate_conversation", max_retries=2, default_retry_delay=30)
@@ -29,7 +42,8 @@ def evaluate_conversation(self: object, conversation_id: str, rubric_id: str | N
     logger.info("evaluation_task_started", conversation_id=conversation_id)
 
     async def _run() -> str:
-        async with async_session_factory() as session:
+        session_factory = _make_session_factory()
+        async with session_factory() as session:
             try:
                 service = EvaluationService(db=session)
                 await service.evaluate_conversation(conversation_id, rubric_id)
@@ -108,7 +122,7 @@ async def _check_eval_run_completion(session: object, conversation_id: str) -> s
         eval_run = result.scalar_one_or_none()
         if eval_run and eval_run.status == "running_evaluation":
             eval_run.status = "completed"
-            eval_run.completed_at = datetime.now(timezone.utc)
+            eval_run.completed_at = datetime.utcnow()
             await session.commit()
             logger.info(
                 "eval_run_completed",
@@ -133,7 +147,8 @@ def evaluate_all_conversations(self: object, eval_run_id: str, rubric_id: str | 
     logger.info("evaluate_all_started", eval_run_id=eval_run_id)
 
     async def _dispatch() -> int:
-        async with async_session_factory() as session:
+        session_factory = _make_session_factory()
+        async with session_factory() as session:
             result = await session.execute(
                 select(Conversation.id).where(
                     Conversation.eval_run_id == eval_run_id,

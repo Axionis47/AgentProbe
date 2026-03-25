@@ -13,6 +13,7 @@ Depends on protocols, not implementations — fully testable with mocks.
 
 from __future__ import annotations
 
+import json
 import time
 from typing import Any
 
@@ -195,16 +196,8 @@ class ScenarioRunner:
         """Single agent LLM call."""
         messages = self._turns_to_messages(turns)
 
-        # Build tools in OpenAI format if agent has tools
-        tools = None
-        if self.agent.tools:
-            tools = [
-                {
-                    "type": "function",
-                    "function": tool,
-                }
-                for tool in self.agent.tools
-            ]
+        # Pass tools directly — they are already in OpenAI format from the DB
+        tools = self.agent.tools if self.agent.tools else None
 
         return await self.llm_client.chat(
             model=self.agent.model,
@@ -263,7 +256,7 @@ class ScenarioRunner:
                             "type": "function",
                             "function": {
                                 "name": tc.name,
-                                "arguments": tc.arguments,
+                                "arguments": json.dumps(tc.arguments) if isinstance(tc.arguments, dict) else tc.arguments,
                             },
                         }
                         for tc in turn.tool_calls

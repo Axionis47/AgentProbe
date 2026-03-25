@@ -21,4 +21,7 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,
 )
 
-celery_app.autodiscover_tasks(["app.workers"])
+celery_app.conf.include = [
+    "app.workers.simulation_tasks",
+    "app.workers.evaluation_tasks",
+]

@@ -48,7 +48,7 @@ class AgentSimulationService:
 
         # Update status
         eval_run.status = "running_simulation"
-        eval_run.started_at = datetime.now(timezone.utc)
+        eval_run.started_at = datetime.utcnow()
         await self.db.flush()
 
         # Load agent config
@@ -145,7 +145,7 @@ class AgentSimulationService:
             eval_run_id=eval_run.id,
             sequence_num=sequence_num,
             status="running",
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.utcnow(),
         )
         self.db.add(conv)
         await self.db.flush()
@@ -185,7 +185,7 @@ class AgentSimulationService:
         conv.total_latency_ms = conv_result.total_latency_ms
         conv.status = "completed" if conv_result.status != "failed" else "failed"
         conv.error_message = conv_result.error_message
-        conv.completed_at = datetime.now(timezone.utc)
+        conv.completed_at = datetime.utcnow()
         conv.metadata_ = {"simulation_status": conv_result.status}
 
         await self.db.flush()

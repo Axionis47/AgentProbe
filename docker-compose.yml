@@ -30,7 +30,6 @@ services:
       retries: 5
       start_period: 30s
     volumes:
-      - ./scripts:/app/scripts
       - ~/.config/gcloud:/root/.config/gcloud:ro
 
   worker:
@@ -47,7 +46,6 @@ services:
       - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-}
     command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=4
     volumes:
-      - ./scripts:/app/scripts
       - ~/.config/gcloud:/root/.config/gcloud:ro
 
   kafka-consumer:

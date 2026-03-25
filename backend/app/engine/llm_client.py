@@ -89,7 +89,35 @@ class LLMClient:
         }
 
         if tools:
-            kwargs["tools"] = tools
+            # LiteLLM's Vertex AI mapper expects tools as list of function objects
+            # with "name" at top level, not wrapped in {"type": "function", "function": {...}}
+            # Normalize to handle both formats
+            normalized_tools = []
+            for tool in tools:
+                if "function" in tool:
+                    # OpenAI wrapped format → extract function object
+                    func = tool["function"]
+                    normalized_tools.append({
+                        "type": "function",
+                        "function": {
+                            "name": func["name"],
+                            "description": func.get("description", ""),
+                            "parameters": func.get("parameters", {"type": "object", "properties": {}}),
+                        },
+                    })
+                elif "name" in tool:
+                    # Already flat format
+                    normalized_tools.append({
+                        "type": "function",
+                        "function": {
+                            "name": tool["name"],
+                            "description": tool.get("description", ""),
+                            "parameters": tool.get("parameters", {"type": "object", "properties": {}}),
+                        },
+                    })
+                else:
+                    normalized_tools.append(tool)
+            kwargs["tools"] = normalized_tools
 
         # Provider-specific config
         if model.startswith("ollama/"):
