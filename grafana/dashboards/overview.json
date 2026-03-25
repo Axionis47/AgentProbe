@@ -68,12 +68,12 @@
         "fieldConfig": {
           "defaults": {
             "min": 0,
-            "max": 5,
+            "max": 10,
             "thresholds": {
               "steps": [
                 {"color": "red", "value": 0},
-                {"color": "yellow", "value": 2.5},
-                {"color": "green", "value": 4}
+                {"color": "yellow", "value": 5},
+                {"color": "green", "value": 7.5}
               ]
             }
           }

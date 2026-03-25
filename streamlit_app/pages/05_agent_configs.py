@@ -32,8 +32,9 @@ with tab_browse:
     except Exception as e:
         st.error(f"Failed to load configs: {e}")
         configs = []
+        data = {}
 
-    st.metric("Total Configs", data.get("total", 0) if configs or data else 0)
+    st.metric("Total Configs", data.get("total", 0))
 
     for cfg in configs:
         status_icon = "Active" if cfg["is_active"] else "Inactive"
@@ -99,6 +100,10 @@ with tab_create:
             "ollama/codellama:7b",
             "claude-sonnet-4-20250514",
             "gpt-4o",
+            "vertex_ai/gemini-1.5-pro",
+            "vertex_ai/gemini-1.5-flash",
+            "vertex_ai/gemini-2.0-flash",
+            "vertex_ai/gemini-2.5-pro-preview-05-06",
         ], index=0)
         system_prompt = st.text_area("System Prompt", height=200, placeholder="You are a helpful assistant...")
         temperature = st.slider("Temperature", 0.0, 2.0, 0.7, 0.1)

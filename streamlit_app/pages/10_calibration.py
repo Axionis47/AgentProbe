@@ -31,6 +31,12 @@ with tab_calibration:
     st.subheader("Model Judge vs Human Score Agreement")
     st.write("Measures how well automated model-judge scores predict human scores.")
 
+    st.info(
+        "This analysis requires both **human evaluations** and **model judge evaluations** "
+        "on the same conversations. If you have not submitted human evaluations yet, go to the "
+        "**Human Evaluation** page first to score some conversations, then return here."
+    )
+
     cal_run_id = st.selectbox(
         "Select Eval Run", list(run_options.keys()),
         format_func=lambda x: run_options[x], key="cal_run",
@@ -104,14 +110,30 @@ with tab_calibration:
                     st.plotly_chart(fig2, use_container_width=True)
 
             except Exception as e:
-                st.error(f"Calibration analysis failed: {e}")
-                st.info("Ensure the selected run has both human AND model judge evaluations.")
+                error_msg = str(e)
+                if "paired" in error_msg.lower() or "human" in error_msg.lower() or "400" in error_msg:
+                    st.warning(
+                        "Not enough paired human + model judge evaluations found for this run. "
+                        "To use calibration analysis:\n\n"
+                        "1. Go to the **Human Evaluation** page\n"
+                        "2. Select this eval run and score several conversations\n"
+                        "3. Return here and re-run the calibration analysis"
+                    )
+                else:
+                    st.error(f"Calibration analysis failed: {e}")
+                    st.info("Ensure the selected run has both human AND model judge evaluations.")
 
 
 # ---- Reliability Tab ----
 with tab_reliability:
     st.subheader("Interrater Reliability (Krippendorff's Alpha)")
     st.write("Measures agreement among multiple human evaluators scoring the same conversations.")
+
+    st.info(
+        "This analysis requires **multiple human evaluators** to have scored the same conversations. "
+        "If only one evaluator has scored conversations, there is no interrater agreement to compute. "
+        "Have additional evaluators submit scores on the **Human Evaluation** page first."
+    )
 
     rel_run_id = st.selectbox(
         "Select Eval Run", list(run_options.keys()),
@@ -162,5 +184,15 @@ with tab_reliability:
                     st.plotly_chart(fig, use_container_width=True)
 
             except Exception as e:
-                st.error(f"Reliability analysis failed: {e}")
-                st.info("Ensure the selected run has multiple human evaluations per conversation.")
+                error_msg = str(e)
+                if "human" in error_msg.lower() or "404" in error_msg or "not found" in error_msg.lower():
+                    st.warning(
+                        "No human evaluations found for this run. "
+                        "To compute interrater reliability:\n\n"
+                        "1. Go to the **Human Evaluation** page\n"
+                        "2. Have **multiple evaluators** score the same conversations\n"
+                        "3. Return here and re-run the reliability analysis"
+                    )
+                else:
+                    st.error(f"Reliability analysis failed: {e}")
+                    st.info("Ensure the selected run has multiple human evaluations per conversation.")

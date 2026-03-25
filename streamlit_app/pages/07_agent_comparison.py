@@ -26,6 +26,9 @@ def load_agent_data(agent_id: str, agent_name: str) -> dict:
             try:
                 evals = client.get_conversation_evaluations(conv["id"])
                 for ev in evals.get("items", []):
+                    # Skip pairwise evaluations -- they have different score semantics
+                    if ev.get("evaluator_type") == "pairwise_judge":
+                        continue
                     ev["agent"] = agent_name
                     all_evals.append(ev)
             except Exception:
@@ -84,6 +87,23 @@ if not all_evals:
 evals_df = pd.DataFrame(all_evals)
 metrics_df = pd.DataFrame(all_metrics) if all_metrics else pd.DataFrame()
 
+# --- Summary Table ---
+st.subheader("Summary")
+summary_rows = []
+for aid in selected_ids:
+    name = config_map[aid]
+    agent_evals = [e for e in all_evals if e.get("agent") == name]
+    agent_metrics = [m for m in all_metrics if m.get("agent") == name]
+    avg_score = sum(e.get("overall_score", 0) or 0 for e in agent_evals) / max(len(agent_evals), 1)
+    summary_rows.append({
+        "Agent": name,
+        "Evaluations": len(agent_evals),
+        "Avg Overall Score": round(avg_score, 2),
+        "Metrics": len(agent_metrics),
+    })
+if summary_rows:
+    st.dataframe(pd.DataFrame(summary_rows), use_container_width=True, hide_index=True)
+
 # --- Overall Score Bar Chart ---
 st.subheader("Overall Score by Agent")
 if "overall_score" in evals_df.columns:
@@ -113,16 +133,34 @@ if dim_rows:
     # --- Radar Chart ---
     st.subheader("Radar Comparison")
     dimensions = sorted(dim_agg["dimension"].unique())
+    RADAR_COLORS = [
+        "rgba(31, 119, 180, 0.5)",  # blue
+        "rgba(255, 127, 14, 0.5)",  # orange
+        "rgba(44, 160, 44, 0.5)",   # green
+        "rgba(214, 39, 40, 0.5)",   # red
+        "rgba(148, 103, 189, 0.5)", # purple
+    ]
     fig = go.Figure()
-    for agent in dim_agg["agent"].unique():
+    for idx, agent in enumerate(dim_agg["agent"].unique()):
         agent_scores = dim_agg[dim_agg["agent"] == agent]
         values = []
         for d in dimensions:
             match = agent_scores[agent_scores["dimension"] == d]["score"]
             values.append(match.values[0] if len(match) > 0 else 0)
         values.append(values[0])  # close the polygon
-        fig.add_trace(go.Scatterpolar(r=values, theta=dimensions + [dimensions[0]], fill="toself", name=agent))
-    fig.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, 10])), title="Dimension Radar")
+        color = RADAR_COLORS[idx % len(RADAR_COLORS)]
+        fig.add_trace(go.Scatterpolar(
+            r=values,
+            theta=dimensions + [dimensions[0]],
+            fill="toself",
+            fillcolor=color,
+            name=agent,
+        ))
+    fig.update_layout(
+        polar=dict(radialaxis=dict(visible=True, range=[0, 10])),
+        title="Dimension Radar",
+        showlegend=True,
+    )
     st.plotly_chart(fig, use_container_width=True)
 
 # --- Violin Plot of Overall Scores ---

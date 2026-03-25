@@ -162,12 +162,6 @@ class AgentProbeClient:
         r.raise_for_status()
         return r.json()
 
-    # Search
-    def semantic_search(self, query: str, **filters: Any) -> dict[str, Any]:
-        r = self.client.post(self._url("/search/semantic"), json={"query": query, **filters})
-        r.raise_for_status()
-        return r.json()
-
     # Health
     def health(self) -> dict[str, Any]:
         r = self.client.get(self._url("/health/ready"))
