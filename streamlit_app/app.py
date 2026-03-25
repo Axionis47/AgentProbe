@@ -7,92 +7,79 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-st.title("AgentProbe")
-st.subheader("Multi-Turn Agent Evaluation Platform")
-
 from lib.api_client import AgentProbeClient
 
 client = AgentProbeClient()
 
-# --- API Health Check ---
+# --- Health check (subtle) ---
 api_ok = False
 try:
     status = client.health()
-    st.success(f"API Status: {status.get('status', 'connected')}")
     api_ok = True
 except Exception:
+    pass
+
+st.title("AgentProbe -- Multi-Turn Agent Evaluation")
+st.caption("Test how your AI agent handles real conversations. Statistically.")
+
+if api_ok:
+    st.markdown(
+        '<span style="color: #2ecc71; font-size: 0.85em;">&#9679; API connected</span>',
+        unsafe_allow_html=True,
+    )
+else:
     st.warning("API is not reachable. Start the backend to enable all features.")
 
-# --- Quick Stats ---
+# --- Big metric cards ---
 if api_ok:
-    st.divider()
-    st.subheader("Quick Stats")
     try:
+        runs_data = client.list_eval_runs(limit=1)
+        convs_data = client.list_conversations(limit=1)
+        configs_data = client.list_agent_configs(limit=1)
+
+        # Count evaluations: iterate completed runs and sum evaluations
+        eval_count = 0
+        all_runs = client.list_eval_runs(limit=100)
+        for run in all_runs.get("items", []):
+            if run.get("status") != "completed":
+                continue
+            run_convs = client.list_conversations(eval_run_id=run["id"], limit=100)
+            for conv in run_convs.get("items", []):
+                try:
+                    evals = client.get_conversation_evaluations(conv["id"])
+                    eval_count += len(evals.get("items", []))
+                except Exception:
+                    pass
+
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            configs = client.list_agent_configs(limit=1)
-            st.metric("Agent Configs", configs.get("total", 0))
+            st.metric("Eval Runs", runs_data.get("total", 0))
         with col2:
-            scenarios = client.list_scenarios(limit=1)
-            st.metric("Scenarios", scenarios.get("total", 0))
+            st.metric("Conversations", convs_data.get("total", 0))
         with col3:
-            runs = client.list_eval_runs(limit=1)
-            st.metric("Eval Runs", runs.get("total", 0))
+            st.metric("Evaluations", eval_count)
         with col4:
-            convs = client.list_conversations(limit=1)
-            st.metric("Conversations", convs.get("total", 0))
+            st.metric("Agents Tested", configs_data.get("total", 0))
     except Exception:
         st.info("Could not load stats. The API may still be initializing.")
 
-# --- Quick Links ---
+# --- What to do ---
 st.divider()
-st.subheader("Quick Links")
+st.subheader("What to do")
 
 col1, col2, col3 = st.columns(3)
+
 with col1:
-    st.page_link("pages/01_eval_runs.py", label="Eval Runs", icon="🚀")
-    st.page_link("pages/02_conversation_viewer.py", label="Conversation Viewer", icon="💬")
-    st.page_link("pages/03_human_eval.py", label="Human Evaluation", icon="👤")
-    st.page_link("pages/04_rubric_editor.py", label="Rubric Editor", icon="📋")
+    st.markdown("### 1. See Results")
+    st.write("View evaluation run results across all agents and scenarios.")
+    st.page_link("pages/01_Results.py", label="Open Results Dashboard", icon="📊")
+
 with col2:
-    st.page_link("pages/05_agent_configs.py", label="Agent Configs", icon="🤖")
-    st.page_link("pages/06_scenarios.py", label="Scenarios", icon="🎭")
-    st.page_link("pages/07_agent_comparison.py", label="Agent Comparison", icon="📊")
+    st.markdown("### 2. Compare Agents")
+    st.write("Head-to-head radar charts and score breakdowns.")
+    st.page_link("pages/04_Compare.py", label="Open Agent Comparison", icon="⚖️")
+
 with col3:
-    st.page_link("pages/08_metrics_dashboard.py", label="Metrics Dashboard", icon="📈")
-    st.page_link("pages/09_elo_rankings.py", label="ELO Rankings", icon="🏆")
-    st.page_link("pages/10_calibration.py", label="Calibration & Reliability", icon="🎯")
-
-# --- Getting Started ---
-st.divider()
-st.subheader("Getting Started")
-
-st.markdown("""
-**AgentProbe** evaluates multi-turn AI agent conversations using automated model judges,
-human evaluators, and pairwise comparisons. Here is the recommended demo flow:
-
-1. **Review Agent Configs** -- Go to *Agent Configs* to see the pre-configured agents
-   (e.g., different models or system prompts).
-
-2. **Review Scenarios** -- Go to *Scenarios* to see the customer support test scenarios
-   with their turn templates, personas, and constraints.
-
-3. **Check Eval Runs** -- Go to *Eval Runs* to see completed evaluation runs.
-   Each run pairs an agent config with a scenario and produces multiple conversations.
-
-4. **Browse Conversations** -- Go to *Conversation Viewer* to step through individual
-   conversations turn-by-turn, seeing tool calls and evaluation scores.
-
-5. **Compare Agents** -- Go to *Agent Comparison* for the key visualization page.
-   See radar charts, bar charts, and violin plots comparing agent performance
-   across rubric dimensions.
-
-6. **Explore Metrics** -- Go to *Metrics Dashboard* for automated metrics:
-   latency, token usage, tool success rates, and correlation heatmaps.
-
-7. **ELO Rankings** -- Go to *ELO Rankings* to run pairwise comparisons
-   and see head-to-head agent rankings.
-
-8. **Calibration** -- Go to *Calibration & Reliability* to measure how well
-   the model judge aligns with human evaluators.
-""")
+    st.markdown("### 3. Inspect Conversations")
+    st.write("Step through multi-turn conversations turn by turn.")
+    st.page_link("pages/02_Conversations.py", label="Open Conversation Inspector", icon="💬")
