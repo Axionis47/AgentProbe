@@ -25,6 +25,7 @@ dependencies = [
     # AI — model-agnostic via LiteLLM (supports Ollama, Claude, OpenAI, Gemini)
     "litellm>=1.55.0",
     "anthropic>=0.39.0",
+    "google-cloud-aiplatform>=1.74.0",
     # Logging
     "structlog>=24.4.0",
     # Utilities

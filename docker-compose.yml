@@ -17,6 +17,9 @@ services:
         condition: service_started
     environment:
       - AGENTPROBE_OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-plotpointe}
+      - GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION:-us-central1}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-}
     command: >
       sh -c "alembic upgrade head &&
              uvicorn app.main:app --host 0.0.0.0 --port 8080 --workers 2"
@@ -28,6 +31,7 @@ services:
       start_period: 30s
     volumes:
       - ./scripts:/app/scripts
+      - ~/.config/gcloud:/root/.config/gcloud:ro
 
   worker:
     build:
@@ -38,9 +42,13 @@ services:
       - api
     environment:
       - AGENTPROBE_OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-plotpointe}
+      - GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION:-us-central1}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-}
     command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=4
     volumes:
       - ./scripts:/app/scripts
+      - ~/.config/gcloud:/root/.config/gcloud:ro
 
   kafka-consumer:
     build:
@@ -52,7 +60,13 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+    environment:
+      - GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT:-plotpointe}
+      - GOOGLE_CLOUD_LOCATION=${GOOGLE_CLOUD_LOCATION:-us-central1}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS:-}
     command: python -m app.pipeline.consumers.run_all
+    volumes:
+      - ~/.config/gcloud:/root/.config/gcloud:ro
 
   streamlit:
     build:

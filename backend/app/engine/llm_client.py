@@ -1,23 +1,41 @@
 """Model-agnostic LLM client using LiteLLM.
 
-Supports Ollama, Claude, OpenAI, and any LiteLLM-compatible provider.
-Swap providers by changing one config value — zero code changes.
+Supports Vertex AI (Gemini), Ollama, Claude, OpenAI, and any LiteLLM-compatible
+provider. Swap providers by changing one config value — zero code changes.
 
 This is the ONLY file that talks to LLM APIs. Mock this for tests.
 """
 
 from __future__ import annotations
 
+import json
 import os
 from typing import Any
 
 import structlog
 from litellm import acompletion
+from litellm.exceptions import (
+    APIConnectionError,
+    APIError,
+    AuthenticationError,
+    NotFoundError,
+    RateLimitError,
+)
 
 from app.config import settings
 from app.engine.types import LLMResponse, ToolCall
 
 logger = structlog.get_logger()
+
+# Vertex AI specific error messages for better diagnostics
+_VERTEX_HINTS: dict[str, str] = {
+    "Could not automatically determine credentials": (
+        "Vertex AI ADC not configured. Run: gcloud auth application-default login"
+    ),
+    "403": "Vertex AI access denied. Check IAM permissions for the service account.",
+    "404": "Model or endpoint not found. Verify model name and region.",
+    "429": "Vertex AI quota exceeded. Check quotas in GCP console.",
+}
 
 
 class LLMClient:
@@ -45,8 +63,8 @@ class LLMClient:
         """Send a chat completion request to any LLM provider.
 
         Args:
-            model: LiteLLM model string (e.g., "ollama/mistral:7b-instruct",
-                   "claude-sonnet-4-20250514", "gpt-4o")
+            model: LiteLLM model string (e.g., "vertex_ai/gemini-2.0-flash",
+                   "ollama/mistral:7b-instruct", "claude-sonnet-4-20250514", "gpt-4o")
             messages: Chat messages in OpenAI format
             system: System prompt (prepended as system message)
             tools: Tool definitions in OpenAI function calling format
@@ -73,9 +91,12 @@ class LLMClient:
         if tools:
             kwargs["tools"] = tools
 
-        # Set Ollama API base for ollama models
+        # Provider-specific config
         if model.startswith("ollama/"):
             kwargs["api_base"] = settings.ollama_base_url
+        elif model.startswith("vertex_ai/"):
+            kwargs["vertex_project"] = settings.vertex_project
+            kwargs["vertex_location"] = settings.vertex_location
 
         logger.debug(
             "llm_request",
@@ -84,37 +105,38 @@ class LLMClient:
             has_tools=bool(tools),
         )
 
-        response = await acompletion(**kwargs)
+        try:
+            response = await acompletion(**kwargs)
+        except RateLimitError as exc:
+            logger.error("llm_rate_limit", model=model, error=str(exc))
+            raise
+        except AuthenticationError as exc:
+            _log_vertex_hint(str(exc))
+            logger.error("llm_auth_error", model=model, error=str(exc))
+            raise
+        except NotFoundError as exc:
+            _log_vertex_hint(str(exc))
+            logger.error("llm_not_found", model=model, error=str(exc))
+            raise
+        except APIConnectionError as exc:
+            logger.error("llm_connection_error", model=model, error=str(exc))
+            raise
+        except APIError as exc:
+            _log_vertex_hint(str(exc))
+            logger.error("llm_api_error", model=model, error=str(exc))
+            raise
 
         # Normalize response
         message = response.choices[0].message
         content = message.content or ""
 
         # Extract tool calls if present
-        tool_calls: list[ToolCall] = []
-        if message.tool_calls:
-            for tc in message.tool_calls:
-                args = tc.function.arguments
-                # LiteLLM may return args as string or dict
-                if isinstance(args, str):
-                    import json
-                    try:
-                        args = json.loads(args)
-                    except json.JSONDecodeError:
-                        args = {"raw": args}
+        tool_calls = _extract_tool_calls(message)
 
-                tool_calls.append(
-                    ToolCall(
-                        id=tc.id or f"call_{id(tc)}",
-                        name=tc.function.name,
-                        arguments=args,
-                    )
-                )
-
-        # Extract usage
+        # Extract usage — normalize across providers
         usage = response.usage
-        input_tokens = usage.prompt_tokens if usage else 0
-        output_tokens = usage.completion_tokens if usage else 0
+        input_tokens = getattr(usage, "prompt_tokens", 0) or 0 if usage else 0
+        output_tokens = getattr(usage, "completion_tokens", 0) or 0 if usage else 0
 
         result = LLMResponse(
             content=content,
@@ -135,3 +157,53 @@ class LLMClient:
         )
 
         return result
+
+
+def _extract_tool_calls(message: Any) -> list[ToolCall]:
+    """Extract and normalize tool calls from any provider's response.
+
+    Handles differences in how providers (OpenAI, Gemini, Claude) return
+    function/tool calls. LiteLLM normalizes most of this, but edge cases
+    remain — especially around argument serialization and missing IDs.
+    """
+    raw_calls = getattr(message, "tool_calls", None)
+    if not raw_calls:
+        return []
+
+    tool_calls: list[ToolCall] = []
+    for idx, tc in enumerate(raw_calls):
+        fn = getattr(tc, "function", None)
+        if fn is None:
+            continue
+
+        name = getattr(fn, "name", None) or ""
+        args = getattr(fn, "arguments", None)
+
+        # LiteLLM may return args as string or dict
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except json.JSONDecodeError:
+                args = {"raw": args}
+        elif args is None:
+            args = {}
+
+        # Gemini sometimes omits tool_call IDs; generate a stable fallback
+        call_id = getattr(tc, "id", None) or f"call_{idx}"
+
+        tool_calls.append(
+            ToolCall(
+                id=call_id,
+                name=name,
+                arguments=args,
+            )
+        )
+    return tool_calls
+
+
+def _log_vertex_hint(error_msg: str) -> None:
+    """Log a helpful hint if the error matches a known Vertex AI pattern."""
+    for pattern, hint in _VERTEX_HINTS.items():
+        if pattern in error_msg:
+            logger.warning("vertex_ai_hint", hint=hint)
+            return
