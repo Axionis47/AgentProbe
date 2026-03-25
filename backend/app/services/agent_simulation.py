@@ -35,6 +35,8 @@ class AgentSimulationService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
         self.llm_client = LLMClient()
+        # Pending Kafka events — emitted by the caller AFTER DB commit
+        self.pending_kafka_events: list[tuple[str, object, str]] = []
 
     async def run_eval(self, eval_run_id: str) -> None:
         """Execute all conversations for an eval run."""
@@ -86,9 +88,12 @@ class AgentSimulationService:
             num_conversations=eval_run.num_conversations,
         )
 
-        try:
-            for seq_num in range(eval_run.num_conversations):
-                await self._run_single_conversation(
+        completed_conversations: list[Conversation] = []
+        failed_count = 0
+
+        for seq_num in range(eval_run.num_conversations):
+            try:
+                conv = await self._run_single_conversation(
                     eval_run=eval_run,
                     agent_persona=agent_persona,
                     user_persona=user_persona,
@@ -96,15 +101,32 @@ class AgentSimulationService:
                     initial_message=initial_message,
                     sequence_num=seq_num,
                 )
+                if conv.status == "completed":
+                    completed_conversations.append(conv)
+                else:
+                    failed_count += 1
+            except Exception as e:
+                failed_count += 1
+                logger.error(
+                    "conversation_failed",
+                    eval_run_id=eval_run_id,
+                    sequence_num=seq_num,
+                    error=str(e),
+                )
 
+        if completed_conversations:
             eval_run.status = "running_evaluation"
-            eval_run.completed_at = datetime.now(timezone.utc)
-
-        except Exception as e:
+        else:
             eval_run.status = "failed"
-            eval_run.error_message = str(e)
-            eval_run.completed_at = datetime.now(timezone.utc)
-            logger.error("simulation_failed", eval_run_id=eval_run_id, error=str(e))
+            eval_run.error_message = f"All {eval_run.num_conversations} conversations failed"
+
+        if failed_count > 0 and completed_conversations:
+            logger.warning(
+                "simulation_partial_failure",
+                eval_run_id=eval_run_id,
+                completed=len(completed_conversations),
+                failed=failed_count,
+            )
 
         await self.db.flush()
 
@@ -176,23 +198,43 @@ class AgentSimulationService:
             status=conv_result.status,
         )
 
-        # Emit Kafka event (best-effort — failure must not break simulation)
-        try:
-            from app.pipeline.events import ConversationCompletedEvent
-            from app.pipeline.producer import KafkaProducer
-            from app.pipeline.topics import CONVERSATION_COMPLETED
+        # Queue Kafka event — emitted by the caller AFTER DB commit to avoid
+        # race conditions where the consumer reads uncommitted data.
+        from app.pipeline.events import ConversationCompletedEvent
+        from app.pipeline.topics import CONVERSATION_COMPLETED
 
-            event = ConversationCompletedEvent(
-                eval_run_id=eval_run.id,
-                conversation_id=conv.id,
-                turn_count=conv_result.turn_count,
-                total_tokens=conv_result.total_tokens,
-                total_latency_ms=conv_result.total_latency_ms,
-                status=conv.status,
-            )
-            producer = KafkaProducer()
-            producer.produce(CONVERSATION_COMPLETED, event.to_envelope(), key=conv.id)
-        except Exception as kafka_err:
-            logger.warning("kafka_event_failed", error=str(kafka_err))
+        event = ConversationCompletedEvent(
+            eval_run_id=eval_run.id,
+            conversation_id=conv.id,
+            turn_count=conv_result.turn_count,
+            total_tokens=conv_result.total_tokens,
+            total_latency_ms=conv_result.total_latency_ms,
+            status=conv.status,
+        )
+        self.pending_kafka_events.append((CONVERSATION_COMPLETED, event.to_envelope(), conv.id))
 
         return conv
+
+    def emit_pending_kafka_events(self) -> None:
+        """Emit all queued Kafka events. Call AFTER the DB transaction is committed."""
+        if not self.pending_kafka_events:
+            return
+
+        try:
+            from app.pipeline.producer import KafkaProducer
+
+            producer = KafkaProducer()
+            for topic, envelope, key in self.pending_kafka_events:
+                try:
+                    producer.produce(topic, envelope, key=key)
+                except Exception as kafka_err:
+                    logger.warning(
+                        "kafka_event_failed",
+                        topic=topic,
+                        key=key,
+                        error=str(kafka_err),
+                    )
+        except Exception as kafka_init_err:
+            logger.warning("kafka_producer_init_failed", error=str(kafka_init_err))
+        finally:
+            self.pending_kafka_events.clear()

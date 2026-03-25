@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 
 import structlog
 from sqlalchemy import func, select
@@ -10,6 +11,7 @@ from sqlalchemy import func, select
 from app.db.session import async_session_factory
 from app.evaluation.aggregation import aggregate_metric_values
 from app.models.conversation import Conversation
+from app.models.eval_run import EvalRun
 from app.models.evaluation import Evaluation
 from app.models.metric import Metric
 from app.pipeline.consumers.base import BaseConsumer
@@ -48,12 +50,17 @@ class EvaluationCompletedConsumer(BaseConsumer):
             )
             total_conversations = conv_count_result.scalar() or 0
 
+            if total_conversations == 0:
+                logger.debug("no_completed_conversations", eval_run_id=eval_run_id)
+                return
+
             # Count conversations that have at least one evaluation
             evaluated_count_result = await session.execute(
                 select(func.count(func.distinct(Evaluation.conversation_id))).where(
                     Evaluation.conversation_id.in_(
                         select(Conversation.id).where(
                             Conversation.eval_run_id == eval_run_id,
+                            Conversation.status == "completed",
                         )
                     )
                 )
@@ -69,7 +76,23 @@ class EvaluationCompletedConsumer(BaseConsumer):
                 )
                 return
 
-            # All evaluated — aggregate metrics
+            # All evaluated — mark eval_run completed if not already done
+            result = await session.execute(
+                select(EvalRun).where(EvalRun.id == eval_run_id)
+            )
+            eval_run = result.scalar_one_or_none()
+            if eval_run and eval_run.status == "running_evaluation":
+                eval_run.status = "completed"
+                eval_run.completed_at = datetime.now(timezone.utc)
+                await session.commit()
+                logger.info(
+                    "eval_run_completed_by_consumer",
+                    eval_run_id=eval_run_id,
+                    evaluated=evaluated_count,
+                    total=total_conversations,
+                )
+
+            # Aggregate metrics
             logger.info(
                 "aggregating_metrics",
                 eval_run_id=eval_run_id,
