@@ -95,6 +95,7 @@ class AgentSimulationService:
             try:
                 conv = await self._run_single_conversation(
                     eval_run=eval_run,
+                    scenario=scenario,
                     agent_persona=agent_persona,
                     user_persona=user_persona,
                     environment=environment,
@@ -133,6 +134,7 @@ class AgentSimulationService:
     async def _run_single_conversation(
         self,
         eval_run: EvalRun,
+        scenario: Scenario,
         agent_persona: AgentPersona,
         user_persona: UserPersona,
         environment: SimulationEnvironment,
@@ -156,7 +158,8 @@ class AgentSimulationService:
             persona=user_persona,
             initial_message=initial_message,
         )
-        tool_sim = ToolSimulator(environment=environment)
+        custom_responses = scenario.constraints.get("tool_responses", None)
+        tool_sim = ToolSimulator(environment=environment, custom_responses=custom_responses)
 
         adversarial: AdversarialStrategy | NoOpAdversarial
         if environment.adversarial_turns:
