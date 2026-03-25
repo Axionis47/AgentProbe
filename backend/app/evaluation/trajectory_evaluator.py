@@ -75,7 +75,7 @@ class TrajectoryEvaluator:
         """Extract ordered list of tool names called across all turns."""
         tools: list[str] = []
         for turn in turns:
-            for tc in turn.get("tool_calls", []):
+            for tc in (turn.get("tool_calls") or []):
                 name = tc.get("name") or tc.get("function", {}).get("name", "")
                 if name:
                     tools.append(name)
