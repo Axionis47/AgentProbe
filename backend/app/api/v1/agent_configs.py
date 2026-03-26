@@ -56,6 +56,8 @@ async def create_agent_config(
         max_tokens=body.max_tokens,
         tools=body.tools,
         metadata_=body.metadata,
+        agent_type=body.agent_type,
+        endpoint_url=body.endpoint_url,
     )
     db.add(agent_config)
     await db.flush()

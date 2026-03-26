@@ -40,8 +40,9 @@ def _make_db_agent_config(**overrides):
     cfg.max_tokens = overrides.get("max_tokens", 4096)
     cfg.tools = overrides.get("tools", [])
     cfg.metadata_ = overrides.get("metadata_", {})
-    # AgentConfigResponse reads .metadata via from_attributes
     cfg.metadata = overrides.get("metadata_", {})
+    cfg.agent_type = overrides.get("agent_type", "builtin")
+    cfg.endpoint_url = overrides.get("endpoint_url", None)
     cfg.is_active = overrides.get("is_active", True)
     cfg.created_at = overrides.get("created_at", now)
     cfg.updated_at = overrides.get("updated_at", now)
