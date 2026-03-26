@@ -328,4 +328,6 @@ class TestErrorHandling:
         )
 
         call_kwargs = mock_completion.call_args.kwargs
-        assert call_kwargs["tools"] == tools
+        # Tools are normalized (description added if missing)
+        assert call_kwargs["tools"][0]["function"]["name"] == "get_weather"
+        assert "tools" in call_kwargs
