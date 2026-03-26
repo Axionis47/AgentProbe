@@ -1,12 +1,10 @@
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
 from lib.api_client import AgentProbeClient
 
-st.set_page_config(page_title="Results Dashboard - AgentProbe", layout="wide")
+st.set_page_config(page_title="Results - AgentProbe", layout="wide")
 
-st.header("Results Dashboard")
-st.caption("Evaluation run results across all agents and scenarios.")
+st.header("Results")
 
 client = AgentProbeClient()
 
@@ -19,7 +17,6 @@ STATUS_COLORS = {
     "cancelled": "⚪",
 }
 
-# Pre-fetch agent and scenario names
 agent_names: dict[str, str] = {}
 scenario_names: dict[str, str] = {}
 try:
@@ -33,7 +30,6 @@ try:
 except Exception:
     pass
 
-# Fetch all runs
 try:
     data = client.list_eval_runs(limit=100)
     runs = data.get("items", [])
@@ -42,13 +38,12 @@ except Exception as e:
     st.stop()
 
 if not runs:
-    st.info("No eval runs found. Go to the Admin page to create one.")
+    st.info("No eval runs found.")
     st.stop()
 
 
 @st.cache_data(ttl=120)
 def compute_run_scores(run_id: str) -> dict:
-    """Get conversation count and average score for a run."""
     try:
         convs_data = client.list_conversations(eval_run_id=run_id, limit=100)
         convs = convs_data.get("items", [])
@@ -94,8 +89,7 @@ def compute_run_scores(run_id: str) -> dict:
     }
 
 
-# Build summary table
-with st.spinner("Loading results..."):
+with st.spinner("Loading..."):
     table_rows = []
     run_details = {}
     for run in runs:
@@ -119,11 +113,7 @@ with st.spinner("Loading results..."):
             "_run_id": run_id,
         })
 
-# ============================================================
-# Quick Stats & Score Distribution
-# ============================================================
-
-# Collect per-agent scores from completed runs
+# Quick Stats
 agent_scores: dict[str, list[float]] = {}
 for row in table_rows:
     run_id = row["_run_id"]
@@ -133,75 +123,20 @@ for row in table_rows:
         if conv.get("avg_score") is not None:
             agent_scores.setdefault(agent_name, []).append(conv["avg_score"])
 
-pro_scores = agent_scores.get("Customer Support Pro", [])
-baseline_scores = agent_scores.get("Generic Baseline", [])
+if len(agent_scores) >= 2:
+    agents_list = list(agent_scores.keys())
+    cols = st.columns(len(agents_list) + 1)
+    for i, agent_name in enumerate(agents_list):
+        s = agent_scores[agent_name]
+        mean = sum(s) / len(s) if s else 0.0
+        cols[i].metric(agent_name, f"{mean:.2f}")
+    if len(agents_list) >= 2:
+        means = [sum(agent_scores[a]) / len(agent_scores[a]) for a in agents_list]
+        gap = means[0] - means[1]
+        cols[len(agents_list)].metric("Gap", f"{abs(gap):.2f}", delta=f"{gap:+.2f}")
 
-if pro_scores or baseline_scores:
-    st.subheader("Quick Stats")
-    col1, col2, col3 = st.columns(3)
-    pro_mean = sum(pro_scores) / len(pro_scores) if pro_scores else 0.0
-    baseline_mean = sum(baseline_scores) / len(baseline_scores) if baseline_scores else 0.0
-    gap = pro_mean - baseline_mean
-
-    col1.metric(
-        label="Avg Score (Pro)",
-        value=f"{pro_mean:.2f}" if pro_scores else "--",
-    )
-    col2.metric(
-        label="Avg Score (Baseline)",
-        value=f"{baseline_mean:.2f}" if baseline_scores else "--",
-    )
-    col3.metric(
-        label="Score Gap",
-        value=f"{abs(gap):.2f}" if (pro_scores and baseline_scores) else "--",
-        delta=f"{gap:+.2f}" if (pro_scores and baseline_scores) else None,
-    )
-
-    # Score Distribution histogram
-    st.subheader("Score Distribution")
-    bins = [(0, 2), (2, 4), (4, 6), (6, 8), (8, 10)]
-    bin_labels = ["0-2", "2-4", "4-6", "6-8", "8-10"]
-
-    def _bin_scores(scores: list[float]) -> list[int]:
-        counts = [0] * len(bins)
-        for s in scores:
-            for i, (lo, hi) in enumerate(bins):
-                if lo <= s < hi or (i == len(bins) - 1 and s == hi):
-                    counts[i] += 1
-                    break
-        return counts
-
-    fig = go.Figure()
-    if pro_scores:
-        fig.add_trace(go.Bar(
-            x=bin_labels,
-            y=_bin_scores(pro_scores),
-            name="Customer Support Pro",
-            marker_color="#636EFA",
-            opacity=0.75,
-        ))
-    if baseline_scores:
-        fig.add_trace(go.Bar(
-            x=bin_labels,
-            y=_bin_scores(baseline_scores),
-            name="Generic Baseline",
-            marker_color="#EF553B",
-            opacity=0.75,
-        ))
-    fig.update_layout(
-        barmode="overlay",
-        xaxis_title="Score Range",
-        yaxis_title="Count",
-        height=320,
-        margin=dict(t=30, b=40),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
-    st.divider()
-
-# Display summary table
-st.subheader("All Eval Runs")
+# Results Table
+st.subheader("All Runs")
 display_df = pd.DataFrame(table_rows)
 if not display_df.empty:
     st.dataframe(
@@ -210,9 +145,8 @@ if not display_df.empty:
         hide_index=True,
     )
 
-# Expandable per-run details
-st.subheader("Per-Run Breakdown")
-st.caption("Expand any run below to see individual conversation scores.")
+# Per-Run Breakdown
+st.subheader("Per-Run Details")
 
 for row in table_rows:
     run_id = row["_run_id"]
@@ -222,7 +156,7 @@ for row in table_rows:
         details = run_details[run_id]
         convs = details["conversations"]
         if not convs:
-            st.write("No conversations in this run.")
+            st.write("No conversations.")
             continue
 
         conv_df = pd.DataFrame(convs)

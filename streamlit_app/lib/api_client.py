@@ -7,7 +7,7 @@ API_URL = os.getenv("AGENTPROBE_API_URL", "http://localhost:8080")
 
 
 class AgentProbeClient:
-    """Typed HTTP client for the AgentProbe FastAPI backend."""
+    """HTTP client for the AgentProbe FastAPI backend."""
 
     def __init__(self, base_url: str = API_URL) -> None:
         self.base_url = base_url.rstrip("/")
@@ -27,20 +27,6 @@ class AgentProbeClient:
         r.raise_for_status()
         return r.json()
 
-    def get_agent_config(self, config_id: str) -> dict[str, Any]:
-        r = self.client.get(self._url(f"/agent-configs/{config_id}"))
-        r.raise_for_status()
-        return r.json()
-
-    def update_agent_config(self, config_id: str, data: dict[str, Any]) -> dict[str, Any]:
-        r = self.client.put(self._url(f"/agent-configs/{config_id}"), json=data)
-        r.raise_for_status()
-        return r.json()
-
-    def delete_agent_config(self, config_id: str) -> None:
-        r = self.client.delete(self._url(f"/agent-configs/{config_id}"))
-        r.raise_for_status()
-
     # Scenarios
     def list_scenarios(self, **params: Any) -> dict[str, Any]:
         r = self.client.get(self._url("/scenarios"), params=params)
@@ -51,20 +37,6 @@ class AgentProbeClient:
         r = self.client.post(self._url("/scenarios"), json=data)
         r.raise_for_status()
         return r.json()
-
-    def get_scenario(self, scenario_id: str) -> dict[str, Any]:
-        r = self.client.get(self._url(f"/scenarios/{scenario_id}"))
-        r.raise_for_status()
-        return r.json()
-
-    def update_scenario(self, scenario_id: str, data: dict[str, Any]) -> dict[str, Any]:
-        r = self.client.put(self._url(f"/scenarios/{scenario_id}"), json=data)
-        r.raise_for_status()
-        return r.json()
-
-    def delete_scenario(self, scenario_id: str) -> None:
-        r = self.client.delete(self._url(f"/scenarios/{scenario_id}"))
-        r.raise_for_status()
 
     # Rubrics
     def list_rubrics(self, **params: Any) -> dict[str, Any]:
@@ -77,21 +49,6 @@ class AgentProbeClient:
         r.raise_for_status()
         return r.json()
 
-    def get_rubric(self, rubric_id: str) -> dict[str, Any]:
-        r = self.client.get(self._url(f"/rubrics/{rubric_id}"))
-        r.raise_for_status()
-        return r.json()
-
-    def update_rubric(self, rubric_id: str, data: dict[str, Any]) -> dict[str, Any]:
-        r = self.client.put(self._url(f"/rubrics/{rubric_id}"), json=data)
-        r.raise_for_status()
-        return r.json()
-
-    def get_rubric_versions(self, rubric_id: str) -> list[dict[str, Any]]:
-        r = self.client.get(self._url(f"/rubrics/{rubric_id}/versions"))
-        r.raise_for_status()
-        return r.json()
-
     # Eval Runs
     def list_eval_runs(self, **params: Any) -> dict[str, Any]:
         r = self.client.get(self._url("/eval-runs"), params=params)
@@ -100,11 +57,6 @@ class AgentProbeClient:
 
     def create_eval_run(self, data: dict[str, Any]) -> dict[str, Any]:
         r = self.client.post(self._url("/eval-runs"), json=data)
-        r.raise_for_status()
-        return r.json()
-
-    def get_eval_run(self, run_id: str) -> dict[str, Any]:
-        r = self.client.get(self._url(f"/eval-runs/{run_id}"))
         r.raise_for_status()
         return r.json()
 
@@ -132,12 +84,6 @@ class AgentProbeClient:
     # Evaluations
     def create_human_evaluation(self, data: dict[str, Any]) -> dict[str, Any]:
         r = self.client.post(self._url("/evaluations/human"), json=data)
-        r.raise_for_status()
-        return r.json()
-
-    # Pairwise Comparison
-    def create_pairwise_comparison(self, data: dict[str, Any]) -> dict[str, Any]:
-        r = self.client.post(self._url("/evaluations/pairwise"), json=data)
         r.raise_for_status()
         return r.json()
 

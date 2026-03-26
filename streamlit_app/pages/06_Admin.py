@@ -6,7 +6,6 @@ from lib.api_client import AgentProbeClient
 st.set_page_config(page_title="Admin - AgentProbe", layout="wide")
 
 st.header("Admin")
-st.caption("Manage agent configs, scenarios, rubrics, and launch new evaluation runs.")
 
 client = AgentProbeClient()
 
@@ -18,9 +17,6 @@ tab_agents, tab_scenarios, tab_rubrics, tab_run = st.tabs([
 # AGENT CONFIGS TAB
 # ============================================================
 with tab_agents:
-    st.subheader("Agent Configurations")
-
-    # --- List existing ---
     try:
         data = client.list_agent_configs(limit=50)
         configs = data.get("items", [])
@@ -33,21 +29,14 @@ with tab_agents:
             status_icon = "Active" if cfg["is_active"] else "Inactive"
             with st.expander(f"{cfg['name']} -- {cfg['model']} ({status_icon})"):
                 st.write(f"**Temperature:** {cfg['temperature']} | **Max Tokens:** {cfg['max_tokens']}")
-                st.write(f"**Created:** {cfg['created_at']}")
-                with st.expander("System Prompt"):
-                    st.code(cfg["system_prompt"], language="text")
+                st.code(cfg["system_prompt"], language="text")
                 if cfg.get("tools"):
-                    with st.expander("Tools"):
-                        st.json(cfg["tools"])
-    else:
-        st.info("No agent configs found.")
+                    st.json(cfg["tools"])
 
-    # --- Create new ---
-    st.divider()
-    st.subheader("Create New Agent Config")
+    st.markdown("")
     with st.form("create_agent"):
+        st.subheader("New Agent Config")
         name = st.text_input("Name")
-        description = st.text_area("Description")
         model = st.selectbox("Model", [
             "ollama/mistral:7b-instruct",
             "ollama/llama3:8b",
@@ -59,27 +48,26 @@ with tab_agents:
             "vertex_ai/gemini-2.0-flash",
             "vertex_ai/gemini-2.5-pro-preview-05-06",
         ], index=0)
-        system_prompt = st.text_area("System Prompt", height=200, placeholder="You are a helpful assistant...")
+        system_prompt = st.text_area("System Prompt", height=200)
         temperature = st.slider("Temperature", 0.0, 2.0, 0.7, 0.1)
         max_tokens = st.number_input("Max Tokens", min_value=1, max_value=200000, value=4096)
-        tools_json = st.text_area("Tools (JSON array)", value="[]", height=100)
+        tools_json = st.text_area("Tools (JSON)", value="[]", height=100)
 
-        if st.form_submit_button("Create Agent Config"):
+        if st.form_submit_button("Create"):
             if not name or not system_prompt:
-                st.error("Name and system prompt are required.")
+                st.error("Name and system prompt required.")
             else:
                 try:
                     tools = json.loads(tools_json)
                     result = client.create_agent_config({
                         "name": name,
-                        "description": description or None,
                         "model": model,
                         "system_prompt": system_prompt,
                         "temperature": temperature,
                         "max_tokens": max_tokens,
                         "tools": tools,
                     })
-                    st.success(f"Created: {result['name']} (ID: {result['id'][:8]}...)")
+                    st.success(f"Created: {result['name']}")
                     st.rerun()
                 except json.JSONDecodeError:
                     st.error("Invalid JSON in tools field.")
@@ -91,9 +79,6 @@ with tab_agents:
 # SCENARIOS TAB
 # ============================================================
 with tab_scenarios:
-    st.subheader("Test Scenarios")
-
-    # --- List existing ---
     try:
         data = client.list_scenarios(limit=50)
         scenarios = data.get("items", [])
@@ -109,28 +94,17 @@ with tab_scenarios:
             if tags_str:
                 label += f" [{tags_str}]"
             with st.expander(label):
-                st.write(f"**Category:** {sc.get('category') or 'N/A'}")
-                st.write(f"**Description:** {sc.get('description') or 'N/A'}")
-                with st.expander("Turns Template"):
-                    st.json(sc.get("turns_template", []))
-                with st.expander("User Persona"):
-                    st.json(sc.get("user_persona", {}))
-                with st.expander("Constraints"):
-                    st.json(sc.get("constraints", {}))
-    else:
-        st.info("No scenarios found.")
+                st.json(sc.get("turns_template", []))
 
-    # --- Create new ---
-    st.divider()
-    st.subheader("Create New Scenario")
+    st.markdown("")
     with st.form("create_scenario"):
+        st.subheader("New Scenario")
         name = st.text_input("Name", key="sc_name")
-        description = st.text_area("Description", key="sc_desc")
-        category = st.text_input("Category", placeholder="e.g. customer_support", key="sc_cat")
+        category = st.text_input("Category", key="sc_cat")
         difficulty = st.selectbox("Difficulty", ["easy", "medium", "hard"], index=1, key="sc_diff")
-        tags = st.text_input("Tags (comma-separated)", placeholder="multi-turn, tool-use", key="sc_tags")
+        tags = st.text_input("Tags (comma-separated)", key="sc_tags")
         turns_template = st.text_area(
-            "Turns Template (JSON array)",
+            "Turns Template (JSON)",
             value=json.dumps([{"role": "user", "content": "Hello, I need help with..."}], indent=2),
             height=200,
             key="sc_turns",
@@ -138,14 +112,13 @@ with tab_scenarios:
         user_persona = st.text_area("User Persona (JSON)", value="{}", height=100, key="sc_persona")
         constraints = st.text_area("Constraints (JSON)", value="{}", height=100, key="sc_constraints")
 
-        if st.form_submit_button("Create Scenario"):
+        if st.form_submit_button("Create"):
             if not name:
                 st.error("Name is required.")
             else:
                 try:
                     result = client.create_scenario({
                         "name": name,
-                        "description": description or None,
                         "category": category or None,
                         "turns_template": json.loads(turns_template),
                         "user_persona": json.loads(user_persona),
@@ -153,10 +126,10 @@ with tab_scenarios:
                         "difficulty": difficulty,
                         "tags": [t.strip() for t in tags.split(",") if t.strip()],
                     })
-                    st.success(f"Created: {result['name']} (ID: {result['id'][:8]}...)")
+                    st.success(f"Created: {result['name']}")
                     st.rerun()
                 except json.JSONDecodeError:
-                    st.error("Invalid JSON in one of the JSON fields.")
+                    st.error("Invalid JSON.")
                 except Exception as e:
                     st.error(f"Failed: {e}")
 
@@ -165,9 +138,6 @@ with tab_scenarios:
 # RUBRICS TAB
 # ============================================================
 with tab_rubrics:
-    st.subheader("Evaluation Rubrics")
-
-    # --- List existing ---
     try:
         data = client.list_rubrics(limit=50)
         rubrics = data.get("items", [])
@@ -179,29 +149,22 @@ with tab_rubrics:
         for rubric in rubrics:
             label = f"{rubric['name']} (v{rubric['version']}) -- {'Active' if rubric['is_active'] else 'Inactive'}"
             with st.expander(label):
-                st.write(f"**Description:** {rubric.get('description') or 'N/A'}")
-                st.write("**Dimensions:**")
                 for dim in rubric.get("dimensions", []):
-                    st.write(f"- **{dim.get('name', '?')}** (weight: {dim.get('weight', '?')}): {dim.get('description', '')}")
-    else:
-        st.info("No rubrics found.")
+                    st.write(f"- **{dim.get('name', '?')}** (weight: {dim.get('weight', '?')})")
 
-    # --- Create new ---
-    st.divider()
-    st.subheader("Create New Rubric")
+    st.markdown("")
     with st.form("create_rubric"):
-        name = st.text_input("Rubric Name", key="rb_name")
+        st.subheader("New Rubric")
+        name = st.text_input("Name", key="rb_name")
         description = st.text_area("Description", key="rb_desc")
-        num_dims = st.number_input("Number of Dimensions", min_value=1, max_value=20, value=5, key="rb_ndims")
+        num_dims = st.number_input("Dimensions", min_value=1, max_value=20, value=5, key="rb_ndims")
 
-        st.write("**Define Dimensions:**")
         dimensions = []
         for i in range(int(num_dims)):
-            st.write(f"--- Dimension {i + 1} ---")
             c1, c2 = st.columns([3, 1])
             with c1:
-                dim_name = st.text_input("Name", key=f"rb_dim_name_{i}", placeholder="e.g. helpfulness")
-                dim_desc = st.text_input("Description", key=f"rb_dim_desc_{i}", placeholder="How helpful is the response?")
+                dim_name = st.text_input(f"Dim {i+1} Name", key=f"rb_dim_name_{i}")
+                dim_desc = st.text_input(f"Dim {i+1} Description", key=f"rb_dim_desc_{i}")
             with c2:
                 dim_weight = st.number_input(
                     "Weight", min_value=0.0, max_value=1.0,
@@ -209,8 +172,7 @@ with tab_rubrics:
                     key=f"rb_dim_weight_{i}",
                 )
             dim_criteria = st.text_input(
-                "Criteria (comma-separated)", key=f"rb_dim_criteria_{i}",
-                placeholder="addresses question, provides examples",
+                f"Dim {i+1} Criteria (comma-separated)", key=f"rb_dim_criteria_{i}",
             )
             dimensions.append({
                 "name": dim_name,
@@ -219,11 +181,11 @@ with tab_rubrics:
                 "criteria": [c.strip() for c in dim_criteria.split(",") if c.strip()] if dim_criteria else [],
             })
 
-        if st.form_submit_button("Create Rubric"):
+        if st.form_submit_button("Create"):
             if not name:
                 st.error("Name is required.")
             elif not all(d["name"] for d in dimensions):
-                st.error("All dimensions must have a name.")
+                st.error("All dimensions need a name.")
             else:
                 try:
                     result = client.create_rubric({
@@ -231,23 +193,16 @@ with tab_rubrics:
                         "description": description or None,
                         "dimensions": dimensions,
                     })
-                    st.success(f"Rubric created: {result['name']} v{result['version']} (ID: {result['id'][:8]}...)")
+                    st.success(f"Created: {result['name']} v{result['version']}")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Failed to create rubric: {e}")
+                    st.error(f"Failed: {e}")
 
 
 # ============================================================
 # RUN EVALUATION TAB
 # ============================================================
 with tab_run:
-    st.subheader("Launch New Evaluation Run")
-    st.info(
-        "An eval run pairs an agent config with a scenario, simulates multiple conversations, "
-        "and scores them with automated judges. It runs asynchronously in the background."
-    )
-
-    # Load options
     try:
         configs_data = client.list_agent_configs(is_active=True, limit=100)
         run_configs = configs_data.get("items", [])
@@ -267,12 +222,12 @@ with tab_run:
         run_rubrics = []
 
     if not run_configs:
-        st.warning("No active agent configs found. Create one in the Agent Configs tab first.")
+        st.warning("No active agent configs.")
     elif not run_scenarios:
-        st.warning("No active scenarios found. Create one in the Scenarios tab first.")
+        st.warning("No active scenarios.")
     else:
         with st.form("create_eval_run"):
-            run_name = st.text_input("Run Name (optional)", placeholder="e.g. Mistral vs GPT-4o on billing")
+            run_name = st.text_input("Run Name (optional)")
 
             config_options = {c["id"]: f"{c['name']} ({c['model']})" for c in run_configs}
             selected_config = st.selectbox(
@@ -288,19 +243,19 @@ with tab_run:
                 format_func=lambda x: scenario_options[x],
             )
 
-            rubric_options = {"__none__": "Default (all dimensions)"}
+            rubric_options = {"__none__": "Default"}
             rubric_options.update({r["id"]: f"{r['name']} v{r['version']}" for r in run_rubrics})
             selected_rubric = st.selectbox(
-                "Rubric (optional)",
+                "Rubric",
                 options=list(rubric_options.keys()),
                 format_func=lambda x: rubric_options[x],
             )
 
             num_conversations = st.number_input(
-                "Number of Conversations", min_value=1, max_value=100, value=5,
+                "Conversations", min_value=1, max_value=100, value=5,
             )
 
-            if st.form_submit_button("Launch Eval Run"):
+            if st.form_submit_button("Launch"):
                 payload: dict = {
                     "agent_config_id": selected_config,
                     "scenario_id": selected_scenario,
@@ -313,9 +268,6 @@ with tab_run:
 
                 try:
                     result = client.create_eval_run(payload)
-                    st.success(
-                        f"Eval run created! ID: {result['id'][:8]}... Status: {result['status']}. "
-                        "The simulation will run asynchronously."
-                    )
+                    st.success(f"Created run {result['id'][:8]}... ({result['status']})")
                 except Exception as e:
-                    st.error(f"Failed to create eval run: {e}")
+                    st.error(f"Failed: {e}")

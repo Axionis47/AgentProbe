@@ -1,21 +1,14 @@
 import streamlit as st
 from lib.api_client import AgentProbeClient
 
-st.set_page_config(page_title="Rate Conversations - AgentProbe", layout="wide")
+st.set_page_config(page_title="Rate - AgentProbe", layout="wide")
 
 st.header("Rate Conversations")
-st.caption("Add your own scores to calibrate the automated judges.")
-
-st.info(
-    "Your ratings help calibrate the automated judges. "
-    "The more you rate, the more you can trust the scores."
-)
 
 client = AgentProbeClient()
 
 DIMENSIONS = ["helpfulness", "accuracy", "safety", "coherence", "tool_usage"]
 
-# --- Pre-fetch names ---
 agent_names: dict[str, str] = {}
 scenario_names: dict[str, str] = {}
 try:
@@ -29,7 +22,6 @@ try:
 except Exception:
     pass
 
-# --- Step 1: Pick a run ---
 try:
     runs_data = client.list_eval_runs(limit=100)
     runs = runs_data.get("items", [])
@@ -48,12 +40,11 @@ for r in runs:
     run_options[r["id"]] = f"{agent} / {scenario}"
 
 selected_run_id = st.selectbox(
-    "Pick an eval run",
+    "Eval Run",
     options=list(run_options.keys()),
     format_func=lambda x: run_options[x],
 )
 
-# --- Step 2: Pick a conversation ---
 try:
     convs_data = client.list_conversations(eval_run_id=selected_run_id, limit=100)
     convs = convs_data.get("items", [])
@@ -66,24 +57,22 @@ if not convs:
     st.stop()
 
 conv_options = {
-    c["id"]: f"Conversation #{c.get('sequence_num', '?')} -- {c['turn_count']} turns"
+    c["id"]: f"#{c.get('sequence_num', '?')} -- {c['turn_count']} turns"
     for c in convs
 }
 selected_conv_id = st.selectbox(
-    "Pick a conversation",
+    "Conversation",
     options=list(conv_options.keys()),
     format_func=lambda x: conv_options[x],
 )
 
-# --- Step 3: Show the conversation ---
 try:
     conv = client.get_conversation(selected_conv_id)
 except Exception as e:
     st.error(f"Failed to load conversation: {e}")
     st.stop()
 
-st.divider()
-st.subheader(f"Conversation ({conv['turn_count']} turns)")
+st.markdown("")
 
 for turn in conv.get("turns", []):
     role = turn.get("role", "unknown")
@@ -92,11 +81,9 @@ for turn in conv.get("turns", []):
         if content:
             st.write(content)
         if turn.get("tool_calls"):
-            with st.expander("Tool Calls"):
-                st.json(turn["tool_calls"])
+            st.json(turn["tool_calls"])
 
-# --- Step 4: Show automated scores + your rating form side by side ---
-st.divider()
+st.markdown("")
 
 left_col, right_col = st.columns(2)
 
@@ -106,21 +93,13 @@ with left_col:
         evals = client.get_conversation_evaluations(selected_conv_id)
         eval_items = evals.get("items", [])
         if not eval_items:
-            st.write("No automated evaluations yet.")
+            st.write("No evaluations yet.")
         else:
             for ev in eval_items:
                 evaluator = ev.get("evaluator_type", "Unknown").replace("_", " ").title()
                 score = ev.get("overall_score")
                 score_str = f"{score:.1f}/10" if score is not None else "N/A"
                 st.metric(evaluator, score_str)
-
-                scores = ev.get("scores", {})
-                if scores and isinstance(scores, dict):
-                    for dim, val in scores.items():
-                        try:
-                            st.write(f"  {dim.replace('_', ' ').title()}: {float(val):.1f}")
-                        except (ValueError, TypeError):
-                            st.write(f"  {dim.replace('_', ' ').title()}: {val}")
     except Exception as e:
         st.warning(f"Could not load evaluations: {e}")
 
@@ -135,11 +114,11 @@ with right_col:
                 key=f"score_{dim}",
             )
 
-        overall = st.slider("Overall Score", 0.0, 10.0, 5.0, 0.5)
-        reasoning = st.text_area("Reasoning", placeholder="Explain your evaluation...")
-        evaluator_id = st.text_input("Your Name / ID", placeholder="reviewer-1")
+        overall = st.slider("Overall", 0.0, 10.0, 5.0, 0.5)
+        reasoning = st.text_area("Notes", placeholder="Optional")
+        evaluator_id = st.text_input("Your ID", placeholder="reviewer-1")
 
-        submitted = st.form_submit_button("Submit Rating")
+        submitted = st.form_submit_button("Submit")
         if submitted:
             payload = {
                 "conversation_id": selected_conv_id,
@@ -150,6 +129,6 @@ with right_col:
             }
             try:
                 result = client.create_human_evaluation(payload)
-                st.success(f"Rating submitted! (ID: {result['id'][:8]}...)")
+                st.success(f"Submitted (ID: {result['id'][:8]}...)")
             except Exception as e:
                 st.error(f"Failed to submit: {e}")

@@ -13,7 +13,6 @@ from lib.api_client import AgentProbeClient
 
 client = AgentProbeClient()
 
-# --- Health check ---
 api_ok = False
 try:
     client.health()
@@ -27,12 +26,6 @@ if not api_ok:
     st.error("Backend API is not reachable. Start it with `make up`.")
     st.stop()
 
-st.markdown(
-    "**What this does:** We threw simulated customer conversations at two AI agents "
-    "and scored every conversation with 3 judges. Below are the results."
-)
-
-# --- Load all data ---
 try:
     all_runs = client.list_eval_runs(limit=100).get("items", [])
     completed_runs = [r for r in all_runs if r.get("status") == "completed"]
@@ -44,7 +37,6 @@ if not completed_runs:
     st.info("No completed evaluation runs yet. Run `make seed && make demo` first.")
     st.stop()
 
-# --- Collect scores per run ---
 rows = []
 for run in completed_runs:
     try:
@@ -69,10 +61,8 @@ if not rows:
 
 df = pd.DataFrame(rows)
 
-# ===================================================================
-# SECTION 1: The Headline
-# ===================================================================
-st.divider()
+# --- Metric Cards ---
+st.markdown("")
 
 agents = df["agent"].unique().tolist()
 if len(agents) >= 2:
@@ -94,14 +84,10 @@ else:
     avg = df["overall_score"].mean()
     st.metric(agent, f"{avg:.1f} / 10")
 
-# ===================================================================
-# SECTION 2: Score by Scenario (the interesting part)
-# ===================================================================
-st.divider()
+# --- Scores by Scenario ---
+st.markdown("")
 st.subheader("Scores by Scenario")
-st.caption("Each bar = average score across multiple conversations. Look for where agents differ.")
 
-# Pivot: agent × scenario, grouped by evaluator
 judge_df = df[df["evaluator"] == "model_judge"]
 if judge_df.empty:
     judge_df = df
@@ -130,42 +116,19 @@ fig.update_layout(
 )
 st.plotly_chart(fig, use_container_width=True)
 
-# ===================================================================
-# SECTION 3: Evaluator Breakdown
-# ===================================================================
-st.divider()
-st.subheader("What the Judges Say")
-st.caption("3 independent judges scored each conversation. Do they agree?")
-
-evaluator_labels = {
-    "model_judge": "AI Judge (Gemini scores the conversation)",
-    "rubric_grader": "Rule-Based Grader (heuristic checks, no AI)",
-    "trajectory": "Tool Sequence Checker (did it call the right tools?)",
-}
+# --- Evaluator Breakdown (table) ---
+st.markdown("")
+st.subheader("Evaluator Breakdown")
 
 eval_summary = df.groupby(["agent", "evaluator"])["overall_score"].agg(["mean", "std"]).reset_index()
 eval_summary.columns = ["Agent", "Evaluator", "Mean", "Std"]
+eval_summary["Mean"] = eval_summary["Mean"].round(1)
+eval_summary["Std"] = eval_summary["Std"].round(1)
+st.dataframe(eval_summary, use_container_width=True, hide_index=True)
 
-for evaluator in df["evaluator"].unique():
-    label = evaluator_labels.get(evaluator, evaluator)
-    edata = eval_summary[eval_summary["Evaluator"] == evaluator]
-    cols = st.columns(len(agents) + 1)
-    with cols[0]:
-        st.markdown(f"**{label}**")
-    for i, agent in enumerate(agents):
-        row = edata[edata["Agent"] == agent]
-        if not row.empty:
-            mean = row["Mean"].values[0]
-            std = row["Std"].values[0]
-            with cols[i + 1]:
-                st.metric(agent, f"{mean:.1f}", delta=f"± {std:.1f} std dev", delta_color="off")
-
-# ===================================================================
-# SECTION 4: Score Distribution
-# ===================================================================
-st.divider()
+# --- Score Distribution ---
+st.markdown("")
 st.subheader("Score Distribution")
-st.caption("Not a single number — a spread. Higher variance = less reliable agent.")
 
 fig2 = go.Figure()
 for agent in agents:
@@ -186,14 +149,12 @@ fig2.update_layout(
 )
 st.plotly_chart(fig2, use_container_width=True)
 
-# ===================================================================
-# SECTION 5: Quick Links
-# ===================================================================
-st.divider()
+# --- Quick Links ---
+st.markdown("")
 col1, col2, col3 = st.columns(3)
 with col1:
-    st.page_link("pages/02_Conversations.py", label="Read the actual conversations", icon="💬")
+    st.page_link("pages/02_Conversations.py", label="Conversations", icon="💬")
 with col2:
-    st.page_link("pages/04_Compare.py", label="Radar chart comparison", icon="📊")
+    st.page_link("pages/04_Compare.py", label="Compare Agents", icon="📊")
 with col3:
-    st.page_link("pages/05_Metrics.py", label="Token & latency metrics", icon="⚡")
+    st.page_link("pages/05_Metrics.py", label="Performance Metrics", icon="⚡")
