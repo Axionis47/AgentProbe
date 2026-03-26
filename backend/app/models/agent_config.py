@@ -18,6 +18,8 @@ class AgentConfig(Base):
     max_tokens: Mapped[int] = mapped_column(Integer, default=4096)
     tools: Mapped[dict] = mapped_column(JSONB, default=list)  # type: ignore[assignment]
     metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict)  # type: ignore[assignment]
+    agent_type: Mapped[str] = mapped_column(String(20), default="builtin")  # "builtin" or "external"
+    endpoint_url: Mapped[str | None] = mapped_column(String(500), nullable=True)  # URL for external agents
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     updated_at: Mapped[datetime] = mapped_column(
         server_default=func.now(),

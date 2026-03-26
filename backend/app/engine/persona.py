@@ -21,6 +21,8 @@ class AgentPersona:
     temperature: float = settings.default_temperature
     max_tokens: int = settings.default_max_tokens
     tools: list[dict[str, Any]] = field(default_factory=list)
+    agent_type: str = "builtin"
+    endpoint_url: str | None = None
 
     @classmethod
     def from_db(cls, agent_config: Any) -> AgentPersona:
@@ -31,6 +33,8 @@ class AgentPersona:
             temperature=agent_config.temperature,
             max_tokens=agent_config.max_tokens,
             tools=agent_config.tools or [],
+            agent_type=getattr(agent_config, 'agent_type', 'builtin'),
+            endpoint_url=getattr(agent_config, 'endpoint_url', None),
         )
 
 

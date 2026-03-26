@@ -205,6 +205,7 @@ AGENT_CONFIGS = [
         "max_tokens": 4096,
         "tools": TOOL_SCHEMAS,
         "metadata_": {},
+        "agent_type": "builtin",
     },
     {
         "name": "Generic Baseline",
@@ -215,6 +216,7 @@ AGENT_CONFIGS = [
         "max_tokens": 4096,
         "tools": TOOL_SCHEMAS,
         "metadata_": {},
+        "agent_type": "builtin",
     },
 ]
 

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class AgentConfigCreate(BaseModel):
@@ -13,6 +13,16 @@ class AgentConfigCreate(BaseModel):
     max_tokens: int = Field(default=4096, ge=1, le=200000)
     tools: list[dict[str, Any]] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
+    agent_type: str = "builtin"
+    endpoint_url: str | None = None
+
+    @model_validator(mode="after")
+    def validate_agent_type(self) -> "AgentConfigCreate":
+        if self.agent_type not in ("builtin", "external"):
+            raise ValueError("agent_type must be 'builtin' or 'external'")
+        if self.agent_type == "external" and not self.endpoint_url:
+            raise ValueError("endpoint_url is required when agent_type is 'external'")
+        return self
 
 
 class AgentConfigUpdate(BaseModel):
@@ -37,6 +47,8 @@ class AgentConfigResponse(BaseModel):
     max_tokens: int
     tools: list[dict[str, Any]]
     metadata: dict[str, Any] = Field(default_factory=dict, alias="metadata_")
+    agent_type: str = "builtin"
+    endpoint_url: str | None = None
     is_active: bool
     created_at: datetime
     updated_at: datetime

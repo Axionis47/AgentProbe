@@ -37,6 +37,16 @@ with tab_agents:
     with st.form("create_agent"):
         st.subheader("New Agent Config")
         name = st.text_input("Name")
+        agent_type_label = st.radio(
+            "Agent Type",
+            options=["Built-in (LLM)", "External (your API)"],
+            index=0,
+            key="agent_type_radio",
+        )
+        agent_type = "builtin" if agent_type_label == "Built-in (LLM)" else "external"
+        endpoint_url = ""
+        if agent_type == "external":
+            endpoint_url = st.text_input("Endpoint URL", placeholder="https://your-api.example.com/chat")
         model = st.selectbox("Model", [
             "ollama/mistral:7b-instruct",
             "ollama/llama3:8b",
@@ -56,17 +66,23 @@ with tab_agents:
         if st.form_submit_button("Create"):
             if not name or not system_prompt:
                 st.error("Name and system prompt required.")
+            elif agent_type == "external" and not endpoint_url:
+                st.error("Endpoint URL is required for external agents.")
             else:
                 try:
                     tools = json.loads(tools_json)
-                    result = client.create_agent_config({
+                    payload = {
                         "name": name,
                         "model": model,
                         "system_prompt": system_prompt,
                         "temperature": temperature,
                         "max_tokens": max_tokens,
                         "tools": tools,
-                    })
+                        "agent_type": agent_type,
+                    }
+                    if endpoint_url:
+                        payload["endpoint_url"] = endpoint_url
+                    result = client.create_agent_config(payload)
                     st.success(f"Created: {result['name']}")
                     st.rerun()
                 except json.JSONDecodeError:

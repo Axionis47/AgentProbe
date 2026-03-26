@@ -167,8 +167,16 @@ class AgentSimulationService:
         else:
             adversarial = NoOpAdversarial()
 
+        # Choose client based on agent type
+        from app.engine.external_client import ExternalAgentClient
+
+        if agent_persona.agent_type == "external" and agent_persona.endpoint_url:
+            agent_client = ExternalAgentClient(endpoint_url=agent_persona.endpoint_url)
+        else:
+            agent_client = self.llm_client
+
         runner = ScenarioRunner(
-            llm_client=self.llm_client,
+            llm_client=agent_client,
             agent_persona=agent_persona,
             user_simulator=user_sim,
             tool_simulator=tool_sim,
