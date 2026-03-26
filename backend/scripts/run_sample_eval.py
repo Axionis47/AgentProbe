@@ -13,7 +13,6 @@ import asyncio
 import sys
 import time
 
-import structlog
 from sqlalchemy import select
 
 from app.config import settings
@@ -23,8 +22,6 @@ from app.models.eval_run import EvalRun
 from app.models.rubric import Rubric
 from app.models.scenario import Scenario
 from app.workers.simulation_tasks import run_simulation
-
-logger = structlog.get_logger()
 
 NUM_CONVERSATIONS_PER_RUN = 3
 POLL_INTERVAL_SECONDS = 10

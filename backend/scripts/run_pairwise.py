@@ -10,9 +10,7 @@ Usage:
 from __future__ import annotations
 
 import asyncio
-import json
 
-import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -27,8 +25,6 @@ from app.models.eval_run import EvalRun
 from app.models.evaluation import Evaluation
 from app.models.rubric import Rubric
 from app.models.scenario import Scenario
-
-logger = structlog.get_logger()
 
 
 async def main() -> None:

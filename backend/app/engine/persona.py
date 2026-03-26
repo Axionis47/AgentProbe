@@ -8,6 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from app.config import settings
+
 
 @dataclass
 class AgentPersona:
@@ -16,8 +18,8 @@ class AgentPersona:
     name: str
     system_prompt: str
     model: str
-    temperature: float = 0.7
-    max_tokens: int = 4096
+    temperature: float = settings.default_temperature
+    max_tokens: int = settings.default_max_tokens
     tools: list[dict[str, Any]] = field(default_factory=list)
 
     @classmethod
@@ -39,7 +41,11 @@ class UserPersona:
     personality: str = "neutral"
     expertise_level: str = "intermediate"
     goal: str = "Get help with a task"
-    model: str = "ollama/llama3:8b-instruct-q4_K_M"
+    model: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.model:
+            self.model = settings.user_simulator_model
 
     @property
     def system_prompt(self) -> str:
@@ -65,5 +71,5 @@ Guidelines:
             personality=data.get("personality", "neutral"),
             expertise_level=data.get("expertise_level", "intermediate"),
             goal=data.get("goal", "Get help with a task"),
-            model=model or data.get("model", "ollama/llama3:8b-instruct-q4_K_M"),
+            model=model or data.get("model", settings.user_simulator_model),
         )

@@ -21,7 +21,7 @@ import structlog
 
 from app.engine.adversarial import AdversarialStrategy, NoOpAdversarial
 from app.engine.environment import SimulationEnvironment
-from app.engine.persona import AgentPersona, UserPersona
+from app.engine.persona import AgentPersona
 from app.engine.tool_simulator import ToolSimulator
 from app.engine.types import (
     ConversationResult,

@@ -58,6 +58,14 @@ class Settings(BaseSettings):
     judge_model: str = "vertex_ai/gemini-2.0-flash"
     user_simulator_model: str = "vertex_ai/gemini-2.0-flash"
 
+    # Simulation defaults
+    default_temperature: float = 0.7
+    default_max_tokens: int = 4096
+    default_num_conversations: int = 5
+    simulation_timeout_seconds: float = 120.0
+    max_total_tokens: int = 50000
+    max_turns: int = 10
+
     # Celery
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"

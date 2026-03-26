@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any
 
-import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,8 +23,6 @@ from app.schemas.evaluation import (
     RankingsResponse,
     ReliabilityResponse,
 )
-
-logger = structlog.get_logger()
 
 router = APIRouter(prefix="/evaluations", tags=["evaluations"])
 

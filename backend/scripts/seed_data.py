@@ -12,7 +12,6 @@ import asyncio
 import json
 import sys
 
-import structlog
 from sqlalchemy import select
 
 from app.config import settings
@@ -20,8 +19,6 @@ from app.db.session import async_session_factory
 from app.models.agent_config import AgentConfig
 from app.models.rubric import Rubric
 from app.models.scenario import Scenario
-
-logger = structlog.get_logger()
 
 # ============================================================
 # Tool Schemas (shared by both agent configs)

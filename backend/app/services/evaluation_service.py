@@ -11,7 +11,6 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.engine.llm_client import LLMClient
 from app.evaluation.automated_metrics import AutomatedMetricsCalculator
 from app.evaluation.model_judge import ModelJudgeEvaluator

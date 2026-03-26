@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime
 
 import structlog
 from sqlalchemy import func, select
@@ -75,15 +75,11 @@ def evaluate_conversation(self: object, conversation_id: str, rubric_id: str | N
     return {"status": "completed", "conversation_id": conversation_id, "eval_run_id": eval_run_id}
 
 
-async def _check_eval_run_completion(session: object, conversation_id: str) -> str | None:
+async def _check_eval_run_completion(session: AsyncSession, conversation_id: str) -> str | None:
     """Check if all conversations in the eval run are evaluated; if so, mark completed.
 
     Returns the eval_run_id if found, else None.
     """
-    from sqlalchemy.ext.asyncio import AsyncSession
-
-    assert isinstance(session, AsyncSession)
-
     # Find the eval_run_id for this conversation
     result = await session.execute(
         select(Conversation.eval_run_id).where(Conversation.id == conversation_id)

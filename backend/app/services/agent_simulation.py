@@ -7,7 +7,7 @@ and stores results. This is the bridge between the API and the engine.
 from __future__ import annotations
 
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import datetime
 
 import structlog
 from sqlalchemy import select
