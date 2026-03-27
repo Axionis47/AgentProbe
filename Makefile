@@ -72,6 +72,12 @@ seed:
 demo:
 	docker compose exec api python -m scripts.run_sample_eval
 
+pairwise:
+	docker compose exec api python -m scripts.run_pairwise
+
+report:
+	docker compose exec api python -m scripts.report
+
 # ===== Health =====
 
 health:

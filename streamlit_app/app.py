@@ -1,11 +1,6 @@
 import streamlit as st
 
-st.set_page_config(
-    page_title="AgentProbe",
-    page_icon="🔍",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
+st.set_page_config(page_title="AgentProbe", page_icon="🔍", layout="wide")
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -23,7 +18,7 @@ except Exception:
 st.title("AgentProbe")
 
 if not api_ok:
-    st.error("Backend API is not reachable. Start it with `make up`.")
+    st.error("Backend not reachable. Run `make up`.")
     st.stop()
 
 try:
@@ -34,9 +29,10 @@ except Exception:
     st.stop()
 
 if not completed_runs:
-    st.info("No completed evaluation runs yet. Run `make seed && make demo` first.")
+    st.info("No data. Run `make seed && make demo`.")
     st.stop()
 
+# --- Load all evaluation data ---
 rows = []
 for run in completed_runs:
     try:
@@ -50,75 +46,113 @@ for run in completed_runs:
                     "evaluator": ev.get("evaluator_type", ""),
                     "overall_score": ev.get("overall_score", 0) or 0,
                     "scores": ev.get("scores", {}),
-                    "conversation_id": conv["id"],
+                    "reasoning": ev.get("reasoning", ""),
                 })
     except Exception:
         continue
 
 if not rows:
-    st.info("No evaluation data found.")
+    st.info("No evaluation data.")
     st.stop()
 
 df = pd.DataFrame(rows)
-
-# --- Metric Cards ---
-st.markdown("")
-
 agents = df["agent"].unique().tolist()
-if len(agents) >= 2:
-    a1, a2 = agents[0], agents[1]
-    avg1 = df[df["agent"] == a1]["overall_score"].mean()
-    avg2 = df[df["agent"] == a2]["overall_score"].mean()
-    gap = avg1 - avg2
+traj_df = df[df["evaluator"] == "trajectory"]
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric(a1, f"{avg1:.1f} / 10")
-    with col2:
-        st.metric(a2, f"{avg2:.1f} / 10")
-    with col3:
-        winner = a1 if gap > 0 else a2
-        st.metric("Winner", winner, delta=f"{abs(gap):.1f} pts ahead")
+# =====================================================
+# SECTION 1: Tool Calling Analysis (THE LEAD)
+# =====================================================
+st.subheader("Tool Calling Analysis")
+
+if not traj_df.empty:
+    # Parse actual vs expected from reasoning text
+    traj_rows = []
+    for _, row in traj_df.iterrows():
+        reasoning = row["reasoning"]
+        scores = row["scores"] if isinstance(row["scores"], dict) else {}
+
+        actual = ""
+        expected = ""
+        if "Actual tools:" in reasoning:
+            actual = reasoning.split("Actual tools:")[1].split(".")[0].strip()
+        if "Expected:" in reasoning:
+            expected = reasoning.split("Expected:")[1].split(".")[0].strip()
+
+        passed = scores.get("recall", 0) == 1.0 and scores.get("precision", 0) >= 0.5 and scores.get("order_score", 0) == 1.0
+
+        traj_rows.append({
+            "Agent": row["agent"],
+            "Scenario": row["scenario"],
+            "Expected": expected,
+            "Actual": actual,
+            "Recall": f"{scores.get('recall', 0):.0%}",
+            "Precision": f"{scores.get('precision', 0):.0%}",
+            "Order": f"{scores.get('order_score', 0):.0%}",
+            "Result": "PASS" if passed else "FAIL",
+        })
+
+    traj_table = pd.DataFrame(traj_rows)
+
+    # Pass rate per agent
+    col1, col2 = st.columns(2)
+    for i, agent in enumerate(agents):
+        agent_traj = traj_table[traj_table["Agent"] == agent]
+        total = len(agent_traj)
+        passed = len(agent_traj[agent_traj["Result"] == "PASS"])
+        rate = (passed / total * 100) if total > 0 else 0
+        with [col1, col2][i % 2]:
+            st.metric(agent, f"{rate:.0f}% pass rate", delta=f"{passed}/{total} runs")
+
+    # Detail table
+    display_cols = ["Agent", "Scenario", "Expected", "Actual", "Result"]
+    styled = traj_table[display_cols].style.map(
+        lambda v: "color: #2ecc71; font-weight: bold" if v == "PASS" else ("color: #e74c3c; font-weight: bold" if v == "FAIL" else ""),
+        subset=["Result"],
+    )
+    st.dataframe(styled, use_container_width=True, hide_index=True)
+
+    # Failure analysis
+    failures = traj_table[traj_table["Result"] == "FAIL"]
+    if not failures.empty:
+        st.markdown("**Failure Modes**")
+        failure_counts = failures.groupby(["Agent", "Scenario"]).size().reset_index(name="Failures")
+        st.dataframe(failure_counts, use_container_width=True, hide_index=True)
+
 else:
-    agent = agents[0]
-    avg = df["overall_score"].mean()
-    st.metric(agent, f"{avg:.1f} / 10")
+    st.info("No trajectory data.")
 
-# --- Scores by Scenario ---
+# =====================================================
+# SECTION 2: Overall Scores
+# =====================================================
 st.markdown("")
-st.subheader("Scores by Scenario")
+st.subheader("Overall Scores")
 
 judge_df = df[df["evaluator"] == "model_judge"]
 if judge_df.empty:
     judge_df = df
 
-scenario_avg = judge_df.groupby(["agent", "scenario"])["overall_score"].agg(["mean", "std", "count"]).reset_index()
-scenario_avg.columns = ["Agent", "Scenario", "Avg Score", "Std Dev", "N"]
+scenario_avg = judge_df.groupby(["agent", "scenario"])["overall_score"].agg(["mean", "std"]).reset_index()
+scenario_avg.columns = ["Agent", "Scenario", "Avg", "Std"]
 
 fig = go.Figure()
 for agent in agents:
-    agent_data = scenario_avg[scenario_avg["Agent"] == agent]
+    ad = scenario_avg[scenario_avg["Agent"] == agent]
     fig.add_trace(go.Bar(
-        name=agent,
-        x=agent_data["Scenario"],
-        y=agent_data["Avg Score"],
-        error_y=dict(type="data", array=agent_data["Std Dev"].fillna(0), visible=True),
-        text=[f"{v:.1f}" for v in agent_data["Avg Score"]],
-        textposition="outside",
+        name=agent, x=ad["Scenario"], y=ad["Avg"],
+        error_y=dict(type="data", array=ad["Std"].fillna(0), visible=True),
+        text=[f"{v:.1f}" for v in ad["Avg"]], textposition="outside",
     ))
 fig.update_layout(
-    barmode="group",
-    yaxis=dict(range=[0, 11], title="Score (0-10)"),
-    xaxis=dict(title=""),
-    height=400,
-    margin=dict(t=20),
+    barmode="group", yaxis=dict(range=[0, 11]), height=350, margin=dict(t=20),
     legend=dict(orientation="h", yanchor="bottom", y=1.02),
 )
 st.plotly_chart(fig, use_container_width=True)
 
-# --- Evaluator Breakdown (table) ---
+# =====================================================
+# SECTION 3: Evaluator Summary
+# =====================================================
 st.markdown("")
-st.subheader("Evaluator Breakdown")
+st.subheader("Evaluator Summary")
 
 eval_summary = df.groupby(["agent", "evaluator"])["overall_score"].agg(["mean", "std"]).reset_index()
 eval_summary.columns = ["Agent", "Evaluator", "Mean", "Std"]
@@ -126,30 +160,9 @@ eval_summary["Mean"] = eval_summary["Mean"].round(1)
 eval_summary["Std"] = eval_summary["Std"].round(1)
 st.dataframe(eval_summary, use_container_width=True, hide_index=True)
 
-# --- Score Distribution ---
-st.markdown("")
-st.subheader("Score Distribution")
-
-fig2 = go.Figure()
-for agent in agents:
-    scores = df[df["agent"] == agent]["overall_score"]
-    fig2.add_trace(go.Histogram(
-        x=scores,
-        name=agent,
-        opacity=0.7,
-        xbins=dict(start=0, end=10, size=1),
-    ))
-fig2.update_layout(
-    barmode="overlay",
-    xaxis=dict(title="Score", range=[0, 10.5]),
-    yaxis=dict(title="Count"),
-    height=300,
-    margin=dict(t=20),
-    legend=dict(orientation="h", yanchor="bottom", y=1.02),
-)
-st.plotly_chart(fig2, use_container_width=True)
-
-# --- Quick Links ---
+# =====================================================
+# Links
+# =====================================================
 st.markdown("")
 col1, col2, col3 = st.columns(3)
 with col1:
@@ -157,4 +170,4 @@ with col1:
 with col2:
     st.page_link("pages/04_Compare.py", label="Compare Agents", icon="📊")
 with col3:
-    st.page_link("pages/05_Metrics.py", label="Performance Metrics", icon="⚡")
+    st.page_link("pages/05_Metrics.py", label="Metrics", icon="⚡")
