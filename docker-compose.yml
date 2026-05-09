@@ -167,17 +167,13 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
-    command: >
+    command: |
       bash -c "
-        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092
-          --topic agent.conversation.completed --partitions 3 --replication-factor 1 &&
-        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092
-          --topic evaluation.score.completed --partitions 3 --replication-factor 1 &&
-        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092
-          --topic metrics.aggregated --partitions 1 --replication-factor 1 &&
-        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092
-          --topic pipeline.errors --partitions 1 --replication-factor 1 &&
-        echo 'All topics created successfully'
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic agent.conversation.completed --partitions 3 --replication-factor 1 &&
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic evaluation.score.completed --partitions 3 --replication-factor 1 &&
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic metrics.aggregated --partitions 1 --replication-factor 1 &&
+      kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic pipeline.errors --partitions 1 --replication-factor 1 &&
+      echo 'All topics created successfully'
       "
 
   chromadb:

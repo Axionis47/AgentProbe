@@ -71,7 +71,7 @@ class Settings(BaseSettings):
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"
 
-    model_config = {"env_prefix": "AGENTPROBE_", "env_file": ".env"}
+    model_config = {"env_prefix": "AGENTPROBE_", "env_file": ".env", "extra": "ignore"}
 
     @model_validator(mode="after")
     def _fill_vertex_from_gcp_env(self) -> "Settings":

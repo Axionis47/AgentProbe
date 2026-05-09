@@ -92,7 +92,7 @@ def test_full_evaluation_flow(http: httpx.Client) -> None:
             ],
             "user_persona": {"goal": "find order"},
             "constraints": {
-                "expected_tools": ["lookup_order"],
+                "expected_tool_sequence": ["lookup_order"],
             },
         },
     )
