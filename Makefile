@@ -52,6 +52,9 @@ test-integration:
 test-e2e:
 	pytest backend/tests/e2e -v -m e2e
 
+test-frontend:
+	pytest streamlit_app/tests -v
+
 test-all:
 	docker compose exec api pytest --cov=app --cov-report=term-missing -v
 
