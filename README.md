@@ -149,19 +149,61 @@ agentprobe/
 
 ## Testing
 
+The suite splits into four tiers. Each one has a different cost / signal trade-off:
+
 ```bash
-# Run unit tests (133 tests)
-make test
+make test            # unit tests — fast, mocked DB/LLM, run on every push
+make test-integration # integration tests — fast, mocked services, run in CI
+make test-e2e        # end-to-end against a real docker-compose stack
+make test-frontend   # Streamlit page smokes via streamlit.testing.v1.AppTest
+make test-all        # everything inside the api container with coverage
+```
 
-# Run with coverage
-make test-all
+**Unit (`backend/tests/unit/`)** — 330+ tests. Cover every API route handler,
+the LLM client and embedding wrapper, all five evaluators, the engine
+(scenario_runner, user_simulator, tool_simulator, adversarial), the Kafka
+consumers, the Celery tasks, and the schemas. DB is mocked at the function
+level, LLM calls go through a protocol so no external services are touched.
+This is what every push runs.
 
-# Run integration or e2e tests
-make test-integration
+**Integration (`backend/tests/integration/`)** — checks orchestration
+between services with mocks: `AgentSimulationService` + `EvaluationService`
+working together, status transitions, conversation persistence shape.
+Still no real DB.
+
+**End-to-end (`backend/tests/e2e/`)** — single test that boots the full
+docker-compose stack (postgres, redis, kafka, chromadb, api, worker,
+kafka-consumer) and runs an actual evaluation through the pipeline. Uses
+the deterministic `FakeLLMClient` (selected via `AGENTPROBE_LLM_PROVIDER=fake`)
+so the test is reproducible and runs without a Vertex / Anthropic / OpenAI
+key. Marked with `@pytest.mark.e2e` so the regular `make test` skips it.
+
+To run e2e locally:
+```bash
+AGENTPROBE_LLM_PROVIDER=fake docker compose up -d
+make migrate
 make test-e2e
 ```
 
-The unit tests cover all 8 evaluators, the simulation engine, Kafka consumers, score aggregation, and metric computation. LLM calls are mocked using protocol-based dependency injection, so no external services are needed to run the test suite.
+**Frontend (`streamlit_app/tests/`)** — smoke tests for every Streamlit page
+using `streamlit.testing.v1.AppTest`. The `AgentProbeClient` is patched
+with a fake at module-import time so no real HTTP calls happen — these
+exist to catch the schema-vs-page-code drift that's the most common silent
+breakage between commits.
+
+**CI** — every push hits the `backend` job (lint with real-bug ruff rules,
+unit + integration tests against a fresh postgres + redis service, with
+`AGENTPROBE_LLM_PROVIDER=fake`). PRs additionally trigger the `frontend`
+job. The mypy --strict gate and full e2e job are deliberately kept off
+master CI today; both need their own focused passes first.
+
+**Pre-commit** (optional but recommended):
+```bash
+pip install pre-commit
+pre-commit install
+```
+Runs the real-bug ruff rules + trailing whitespace + a `.DS_Store` guard
+on every commit. Heavier checks stay in CI so commits stay fast.
 
 ## Streamlit Pages
 
