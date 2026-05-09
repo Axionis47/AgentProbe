@@ -166,6 +166,11 @@ class AgentProbeClient:
         r.raise_for_status()
         return r.json()
 
+    def create_pairwise_evaluation(self, data: dict[str, Any]) -> dict[str, Any]:
+        r = self.client.post(self._url("/evaluations/pairwise"), json=data)
+        r.raise_for_status()
+        return r.json()
+
     # Rankings
     def get_rankings(self, scenario_id: str | None = None) -> dict[str, Any]:
         params = {}

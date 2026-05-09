@@ -81,6 +81,146 @@ with tab_elo:
         ], showlegend=False)
         st.plotly_chart(fig, use_container_width=True)
 
+    # -------------------------------------------------------
+    # Pairwise comparison form — directly drive ELO updates
+    # -------------------------------------------------------
+    st.markdown("---")
+    st.subheader("Run a pairwise comparison")
+    st.caption(
+        "Pick two agents that have completed runs on the same scenario. "
+        "We'll compare their most recent conversations head-to-head and "
+        "update ELO with the result."
+    )
+
+    try:
+        agent_data = client.list_agent_configs(limit=100)
+        all_agents = {a["id"]: a["name"] for a in agent_data.get("items", [])}
+    except Exception:
+        all_agents = {}
+    try:
+        rubric_data = client.list_rubrics(is_active=True, limit=100)
+        rubric_options = {"__default__": "Default dimensions"}
+        rubric_options.update(
+            {r["id"]: f"{r['name']} v{r['version']}" for r in rubric_data.get("items", [])}
+        )
+    except Exception:
+        rubric_options = {"__default__": "Default dimensions"}
+
+    pw_scenario_id = scenario_id  # reuse the scenario picker above
+    if pw_scenario_id is None:
+        st.info("Pick a specific scenario above (not 'All Scenarios') to enable comparison.")
+    else:
+        # Find which agents actually have completed conversations under this scenario.
+        try:
+            scenario_runs = [
+                r for r in runs
+                if r.get("scenario_id") == pw_scenario_id and r.get("status") == "completed"
+            ]
+            agents_in_scenario = sorted(
+                {r["agent_config_id"] for r in scenario_runs if r.get("agent_config_id")},
+                key=lambda a: all_agents.get(a, a),
+            )
+        except Exception:
+            agents_in_scenario = []
+
+        if len(agents_in_scenario) < 2:
+            st.info("Need at least 2 agents with completed runs on this scenario.")
+        else:
+            with st.form("pairwise_form"):
+                col_a, col_b, col_r = st.columns(3)
+                with col_a:
+                    agent_a = st.selectbox(
+                        "Agent A",
+                        options=agents_in_scenario,
+                        format_func=lambda a: all_agents.get(a, a[:8]),
+                        key="pw_agent_a",
+                    )
+                with col_b:
+                    others = [a for a in agents_in_scenario if a != agent_a]
+                    agent_b = st.selectbox(
+                        "Agent B",
+                        options=others,
+                        format_func=lambda a: all_agents.get(a, a[:8]),
+                        key="pw_agent_b",
+                    )
+                with col_r:
+                    rubric_choice = st.selectbox(
+                        "Rubric",
+                        options=list(rubric_options.keys()),
+                        format_func=lambda x: rubric_options[x],
+                        key="pw_rubric",
+                    )
+
+                submitted = st.form_submit_button("Compare")
+
+            if submitted:
+                # Pick the most recent completed conversation for each agent under this scenario.
+                def _latest_conv_for(agent_id: str) -> str | None:
+                    runs_for_agent = [
+                        r for r in scenario_runs if r["agent_config_id"] == agent_id
+                    ]
+                    runs_for_agent.sort(key=lambda r: r.get("created_at", ""), reverse=True)
+                    for r in runs_for_agent:
+                        try:
+                            convs = client.list_conversations(
+                                eval_run_id=r["id"], limit=20
+                            ).get("items", [])
+                        except Exception:
+                            continue
+                        for c in convs:
+                            if c.get("status") == "completed":
+                                return c["id"]
+                    return None
+
+                conv_a = _latest_conv_for(agent_a)
+                conv_b = _latest_conv_for(agent_b)
+
+                if not conv_a or not conv_b:
+                    st.error("Could not find a completed conversation for one of the agents.")
+                else:
+                    payload: dict = {
+                        "conversation_id_a": conv_a,
+                        "conversation_id_b": conv_b,
+                    }
+                    if rubric_choice != "__default__":
+                        payload["rubric_id"] = rubric_choice
+
+                    with st.spinner("Running pairwise judge..."):
+                        try:
+                            result = client.create_pairwise_evaluation(payload)
+                        except Exception as e:
+                            st.error(f"Comparison failed: {e}")
+                            result = None
+
+                    if result:
+                        winner_label = (
+                            all_agents.get(agent_a, "Agent A")
+                            if result["winner"] == "a"
+                            else all_agents.get(agent_b, "Agent B")
+                            if result["winner"] == "b"
+                            else "Draw"
+                        )
+                        cols = st.columns([1, 1, 1])
+                        cols[0].metric("Winner", winner_label)
+                        cols[1].metric("Confidence", f"{result['confidence'] * 100:.0f}%")
+                        cols[2].metric("Match ID", result["match_id"][:8])
+
+                        prefs = result.get("dimension_preferences") or {}
+                        if prefs:
+                            st.write("**Dimension preferences**")
+                            pref_df = pd.DataFrame(
+                                [
+                                    {"Dimension": k, "Preferred": v}
+                                    for k, v in prefs.items()
+                                ]
+                            )
+                            st.dataframe(pref_df, use_container_width=True, hide_index=True)
+
+                        if result.get("reasoning"):
+                            with st.expander("Judge reasoning"):
+                                st.write(result["reasoning"])
+                        st.success("ELO updated. Re-render the rankings table above to see the new ratings.")
+
 
 # ============================================================
 # CALIBRATION TAB
