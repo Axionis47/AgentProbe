@@ -1,7 +1,9 @@
-import streamlit as st
+import time
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import streamlit as st
 from lib.api_client import AgentProbeClient
 
 st.set_page_config(page_title="Compare - AgentProbe", layout="wide")
@@ -9,6 +11,46 @@ st.set_page_config(page_title="Compare - AgentProbe", layout="wide")
 st.header("Agent Comparison")
 
 client = AgentProbeClient()
+
+RUNNING_STATUSES = {"pending", "running_simulation", "running_evaluation"}
+
+
+def _render_running_runs_panel() -> None:
+    """Show in-progress runs with cancel buttons. Auto-refreshes when toggled."""
+    try:
+        all_runs = client.list_eval_runs(limit=100).get("items", [])
+    except Exception:
+        return
+    running = [r for r in all_runs if r.get("status") in RUNNING_STATUSES]
+    if not running:
+        return
+
+    st.subheader(f"In progress ({len(running)})")
+    auto = st.checkbox(
+        "Auto-refresh every 2s while runs are in progress",
+        value=True,
+        key="compare_auto_refresh",
+    )
+    for run in running:
+        cols = st.columns([3, 2, 1])
+        with cols[0]:
+            st.write(f"**{run.get('name') or run['id'][:8]}**")
+        with cols[1]:
+            st.write(f"Status: `{run['status']}`")
+        with cols[2]:
+            if st.button("Cancel", key=f"compare_cancel_{run['id']}"):
+                try:
+                    client.cancel_eval_run(run["id"])
+                    st.success("Cancellation requested.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Failed: {e}")
+    if auto:
+        time.sleep(2)
+        st.rerun()
+
+
+_render_running_runs_panel()
 
 
 @st.cache_data(ttl=300)

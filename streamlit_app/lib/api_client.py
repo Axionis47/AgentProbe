@@ -107,6 +107,16 @@ class AgentProbeClient:
         r.raise_for_status()
         return r.json()
 
+    def get_eval_run(self, run_id: str) -> dict[str, Any]:
+        r = self.client.get(self._url(f"/eval-runs/{run_id}"))
+        r.raise_for_status()
+        return r.json()
+
+    def cancel_eval_run(self, run_id: str) -> dict[str, Any]:
+        r = self.client.post(self._url(f"/eval-runs/{run_id}/cancel"))
+        r.raise_for_status()
+        return r.json()
+
     # Conversations
     def list_conversations(self, **params: Any) -> dict[str, Any]:
         r = self.client.get(self._url("/conversations"), params=params)

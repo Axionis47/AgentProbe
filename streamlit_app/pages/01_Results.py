@@ -1,5 +1,7 @@
-import streamlit as st
+import time
+
 import pandas as pd
+import streamlit as st
 from lib.api_client import AgentProbeClient
 
 st.set_page_config(page_title="Results - AgentProbe", layout="wide")
@@ -7,6 +9,8 @@ st.set_page_config(page_title="Results - AgentProbe", layout="wide")
 st.header("Results")
 
 client = AgentProbeClient()
+
+RUNNING_STATUSES = {"pending", "running_simulation", "running_evaluation"}
 
 STATUS_COLORS = {
     "completed": "🟢",
@@ -40,6 +44,40 @@ except Exception as e:
 if not runs:
     st.info("No eval runs found.")
     st.stop()
+
+
+# ---------------------------------------------------------------------------
+# Running runs panel: live status + cancel + optional auto-refresh
+# ---------------------------------------------------------------------------
+running_runs = [r for r in runs if r.get("status") in RUNNING_STATUSES]
+if running_runs:
+    st.subheader(f"In progress ({len(running_runs)})")
+    auto_refresh = st.checkbox(
+        "Auto-refresh every 2s while runs are in progress", value=True, key="auto_refresh_running"
+    )
+
+    for run in running_runs:
+        run_id = run["id"]
+        agent = agent_names.get(run.get("agent_config_id", ""), "?")
+        scenario = scenario_names.get(run.get("scenario_id", ""), "?")
+        cols = st.columns([3, 2, 1])
+        with cols[0]:
+            st.write(f"**{agent} / {scenario}**")
+        with cols[1]:
+            st.write(f"Status: `{run['status']}`")
+        with cols[2]:
+            if st.button("Cancel", key=f"cancel_{run_id}"):
+                try:
+                    client.cancel_eval_run(run_id)
+                    st.success("Cancellation requested.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Failed: {e}")
+
+    if auto_refresh:
+        # Sleep then rerun. Streamlit reruns the whole script — fresh API state.
+        time.sleep(2)
+        st.rerun()
 
 
 @st.cache_data(ttl=120)
