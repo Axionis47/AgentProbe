@@ -27,6 +27,20 @@ class AgentProbeClient:
         r.raise_for_status()
         return r.json()
 
+    def get_agent_config(self, config_id: str) -> dict[str, Any]:
+        r = self.client.get(self._url(f"/agent-configs/{config_id}"))
+        r.raise_for_status()
+        return r.json()
+
+    def update_agent_config(self, config_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        r = self.client.put(self._url(f"/agent-configs/{config_id}"), json=data)
+        r.raise_for_status()
+        return r.json()
+
+    def delete_agent_config(self, config_id: str) -> None:
+        r = self.client.delete(self._url(f"/agent-configs/{config_id}"))
+        r.raise_for_status()
+
     # Scenarios
     def list_scenarios(self, **params: Any) -> dict[str, Any]:
         r = self.client.get(self._url("/scenarios"), params=params)
@@ -38,6 +52,20 @@ class AgentProbeClient:
         r.raise_for_status()
         return r.json()
 
+    def get_scenario(self, scenario_id: str) -> dict[str, Any]:
+        r = self.client.get(self._url(f"/scenarios/{scenario_id}"))
+        r.raise_for_status()
+        return r.json()
+
+    def update_scenario(self, scenario_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        r = self.client.put(self._url(f"/scenarios/{scenario_id}"), json=data)
+        r.raise_for_status()
+        return r.json()
+
+    def delete_scenario(self, scenario_id: str) -> None:
+        r = self.client.delete(self._url(f"/scenarios/{scenario_id}"))
+        r.raise_for_status()
+
     # Rubrics
     def list_rubrics(self, **params: Any) -> dict[str, Any]:
         r = self.client.get(self._url("/rubrics"), params=params)
@@ -46,6 +74,25 @@ class AgentProbeClient:
 
     def create_rubric(self, data: dict[str, Any]) -> dict[str, Any]:
         r = self.client.post(self._url("/rubrics"), json=data)
+        r.raise_for_status()
+        return r.json()
+
+    def get_rubric(self, rubric_id: str) -> dict[str, Any]:
+        r = self.client.get(self._url(f"/rubrics/{rubric_id}"))
+        r.raise_for_status()
+        return r.json()
+
+    def update_rubric(self, rubric_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        r = self.client.put(self._url(f"/rubrics/{rubric_id}"), json=data)
+        r.raise_for_status()
+        return r.json()
+
+    def delete_rubric(self, rubric_id: str) -> None:
+        r = self.client.delete(self._url(f"/rubrics/{rubric_id}"))
+        r.raise_for_status()
+
+    def list_rubric_versions(self, rubric_id: str) -> list[dict[str, Any]]:
+        r = self.client.get(self._url(f"/rubrics/{rubric_id}/versions"))
         r.raise_for_status()
         return r.json()
 

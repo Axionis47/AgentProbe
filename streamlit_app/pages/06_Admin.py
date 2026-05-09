@@ -33,6 +33,70 @@ with tab_agents:
                 if cfg.get("tools"):
                     st.json(cfg["tools"])
 
+                col_edit, col_del = st.columns([1, 1])
+                with col_edit:
+                    edit_open = st.checkbox(
+                        "Edit",
+                        key=f"agent_edit_open_{cfg['id']}",
+                        value=False,
+                    )
+                with col_del:
+                    confirm_key = f"agent_confirm_delete_{cfg['id']}"
+                    if st.session_state.get(confirm_key):
+                        if st.button("Confirm delete (deactivate)", key=f"agent_del_yes_{cfg['id']}"):
+                            try:
+                                client.delete_agent_config(cfg["id"])
+                                st.session_state.pop(confirm_key, None)
+                                st.success("Deactivated.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Failed: {e}")
+                        if st.button("Cancel", key=f"agent_del_no_{cfg['id']}"):
+                            st.session_state.pop(confirm_key, None)
+                            st.rerun()
+                    else:
+                        if st.button("Delete", key=f"agent_del_{cfg['id']}"):
+                            st.session_state[confirm_key] = True
+                            st.rerun()
+
+                if edit_open:
+                    with st.form(f"agent_edit_form_{cfg['id']}"):
+                        e_name = st.text_input("Name", value=cfg["name"])
+                        e_model = st.text_input("Model", value=cfg["model"])
+                        e_system = st.text_area(
+                            "System Prompt", value=cfg["system_prompt"], height=200
+                        )
+                        e_temp = st.slider(
+                            "Temperature", 0.0, 2.0, float(cfg["temperature"]), 0.1
+                        )
+                        e_maxtok = st.number_input(
+                            "Max Tokens", min_value=1, max_value=200000,
+                            value=int(cfg["max_tokens"]),
+                        )
+                        e_tools = st.text_area(
+                            "Tools (JSON)", value=json.dumps(cfg.get("tools", []), indent=2),
+                            height=120,
+                        )
+                        e_active = st.checkbox("Active", value=bool(cfg["is_active"]))
+                        if st.form_submit_button("Save"):
+                            try:
+                                update = {
+                                    "name": e_name,
+                                    "model": e_model,
+                                    "system_prompt": e_system,
+                                    "temperature": e_temp,
+                                    "max_tokens": e_maxtok,
+                                    "tools": json.loads(e_tools),
+                                    "is_active": e_active,
+                                }
+                                client.update_agent_config(cfg["id"], update)
+                                st.success("Saved.")
+                                st.rerun()
+                            except json.JSONDecodeError:
+                                st.error("Invalid JSON in tools.")
+                            except Exception as e:
+                                st.error(f"Failed: {e}")
+
     st.markdown("")
     with st.form("create_agent"):
         st.subheader("New Agent Config")
@@ -112,6 +176,81 @@ with tab_scenarios:
             with st.expander(label):
                 st.json(sc.get("turns_template", []))
 
+                col_edit, col_del = st.columns([1, 1])
+                with col_edit:
+                    sc_edit_open = st.checkbox(
+                        "Edit", key=f"scenario_edit_open_{sc['id']}", value=False
+                    )
+                with col_del:
+                    sc_confirm_key = f"scenario_confirm_delete_{sc['id']}"
+                    if st.session_state.get(sc_confirm_key):
+                        if st.button("Confirm delete", key=f"sc_del_yes_{sc['id']}"):
+                            try:
+                                client.delete_scenario(sc["id"])
+                                st.session_state.pop(sc_confirm_key, None)
+                                st.success("Deactivated.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Failed: {e}")
+                        if st.button("Cancel", key=f"sc_del_no_{sc['id']}"):
+                            st.session_state.pop(sc_confirm_key, None)
+                            st.rerun()
+                    else:
+                        if st.button("Delete", key=f"sc_del_{sc['id']}"):
+                            st.session_state[sc_confirm_key] = True
+                            st.rerun()
+
+                if sc_edit_open:
+                    with st.form(f"sc_edit_form_{sc['id']}"):
+                        e_name = st.text_input("Name", value=sc["name"])
+                        e_cat = st.text_input("Category", value=sc.get("category") or "")
+                        e_diff = st.selectbox(
+                            "Difficulty",
+                            options=["easy", "medium", "hard"],
+                            index=["easy", "medium", "hard"].index(
+                                sc.get("difficulty") or "medium"
+                            ),
+                        )
+                        e_tags = st.text_input(
+                            "Tags (comma-separated)",
+                            value=", ".join(sc.get("tags", [])),
+                        )
+                        e_turns = st.text_area(
+                            "Turns Template (JSON)",
+                            value=json.dumps(sc.get("turns_template", []), indent=2),
+                            height=180,
+                        )
+                        e_persona = st.text_area(
+                            "User Persona (JSON)",
+                            value=json.dumps(sc.get("user_persona", {}), indent=2),
+                            height=80,
+                        )
+                        e_constraints = st.text_area(
+                            "Constraints (JSON)",
+                            value=json.dumps(sc.get("constraints", {}), indent=2),
+                            height=80,
+                        )
+                        e_active = st.checkbox("Active", value=bool(sc["is_active"]))
+                        if st.form_submit_button("Save"):
+                            try:
+                                update = {
+                                    "name": e_name,
+                                    "category": e_cat or None,
+                                    "difficulty": e_diff,
+                                    "tags": [t.strip() for t in e_tags.split(",") if t.strip()],
+                                    "turns_template": json.loads(e_turns),
+                                    "user_persona": json.loads(e_persona),
+                                    "constraints": json.loads(e_constraints),
+                                    "is_active": e_active,
+                                }
+                                client.update_scenario(sc["id"], update)
+                                st.success("Saved.")
+                                st.rerun()
+                            except json.JSONDecodeError:
+                                st.error("Invalid JSON.")
+                            except Exception as e:
+                                st.error(f"Failed: {e}")
+
     st.markdown("")
     with st.form("create_scenario"):
         st.subheader("New Scenario")
@@ -167,6 +306,75 @@ with tab_rubrics:
             with st.expander(label):
                 for dim in rubric.get("dimensions", []):
                     st.write(f"- **{dim.get('name', '?')}** (weight: {dim.get('weight', '?')})")
+
+                col_edit, col_versions, col_del = st.columns([1, 1, 1])
+                with col_edit:
+                    rb_edit_open = st.checkbox(
+                        "Edit", key=f"rubric_edit_open_{rubric['id']}", value=False
+                    )
+                with col_versions:
+                    rb_ver_open = st.checkbox(
+                        "Versions", key=f"rubric_ver_open_{rubric['id']}", value=False
+                    )
+                with col_del:
+                    rb_confirm_key = f"rubric_confirm_delete_{rubric['id']}"
+                    if st.session_state.get(rb_confirm_key):
+                        if st.button("Confirm delete", key=f"rb_del_yes_{rubric['id']}"):
+                            try:
+                                client.delete_rubric(rubric["id"])
+                                st.session_state.pop(rb_confirm_key, None)
+                                st.success("Deleted.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Failed: {e}")
+                        if st.button("Cancel", key=f"rb_del_no_{rubric['id']}"):
+                            st.session_state.pop(rb_confirm_key, None)
+                            st.rerun()
+                    else:
+                        if st.button("Delete", key=f"rb_del_{rubric['id']}"):
+                            st.session_state[rb_confirm_key] = True
+                            st.rerun()
+
+                if rb_ver_open:
+                    try:
+                        versions = client.list_rubric_versions(rubric["id"])
+                        for v in versions:
+                            v_active = "active" if v.get("is_active") else "archived"
+                            st.write(
+                                f"- v{v['version']} ({v_active}) — created {v.get('created_at', '')}"
+                            )
+                    except Exception as e:
+                        st.warning(f"Could not load versions: {e}")
+
+                if rb_edit_open:
+                    with st.form(f"rb_edit_form_{rubric['id']}"):
+                        e_name = st.text_input("Name", value=rubric["name"])
+                        e_desc = st.text_area(
+                            "Description", value=rubric.get("description") or ""
+                        )
+                        e_dims = st.text_area(
+                            "Dimensions (JSON)",
+                            value=json.dumps(rubric.get("dimensions", []), indent=2),
+                            height=200,
+                        )
+                        e_active = st.checkbox(
+                            "Active", value=bool(rubric["is_active"])
+                        )
+                        if st.form_submit_button("Save"):
+                            try:
+                                update = {
+                                    "name": e_name,
+                                    "description": e_desc or None,
+                                    "dimensions": json.loads(e_dims),
+                                    "is_active": e_active,
+                                }
+                                client.update_rubric(rubric["id"], update)
+                                st.success("Saved.")
+                                st.rerun()
+                            except json.JSONDecodeError:
+                                st.error("Invalid JSON.")
+                            except Exception as e:
+                                st.error(f"Failed: {e}")
 
     st.markdown("")
     with st.form("create_rubric"):
