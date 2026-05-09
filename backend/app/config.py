@@ -57,6 +57,7 @@ class Settings(BaseSettings):
     default_model: str = "vertex_ai/gemini-2.0-flash"
     judge_model: str = "vertex_ai/gemini-2.0-flash"
     user_simulator_model: str = "vertex_ai/gemini-2.0-flash"
+    embedding_model: str = "vertex_ai/text-embedding-004"
 
     # Simulation defaults
     default_temperature: float = 0.7

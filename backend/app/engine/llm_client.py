@@ -13,7 +13,7 @@ import os
 from typing import Any
 
 import structlog
-from litellm import acompletion
+from litellm import acompletion, aembedding
 from litellm.exceptions import (
     APIConnectionError,
     APIError,
@@ -185,6 +185,31 @@ class LLMClient:
         )
 
         return result
+
+    async def embed(self, text: str, model: str | None = None) -> list[float]:
+        """Embed a single text into a vector using the configured embedding model.
+
+        Used by the conversation similarity feature to find runs that "look like"
+        each other. Provider selection follows the same LiteLLM convention as chat.
+        """
+        chosen_model = model or settings.embedding_model
+        kwargs: dict[str, Any] = {"model": chosen_model, "input": [text]}
+        if chosen_model.startswith("vertex_ai/"):
+            kwargs["vertex_project"] = settings.vertex_project
+            kwargs["vertex_location"] = settings.vertex_location
+        elif chosen_model.startswith("ollama/"):
+            kwargs["api_base"] = settings.ollama_base_url
+
+        try:
+            response = await aembedding(**kwargs)
+        except (RateLimitError, AuthenticationError, NotFoundError, APIConnectionError, APIError) as exc:
+            _log_vertex_hint(str(exc))
+            logger.error("embedding_error", model=chosen_model, error=str(exc))
+            raise
+
+        # LiteLLM normalizes to OpenAI-style: data is a list of {"embedding": [...]}
+        vector = response.data[0]["embedding"] if isinstance(response.data[0], dict) else response.data[0].embedding
+        return list(vector)
 
 
 def _extract_tool_calls(message: Any) -> list[ToolCall]:
