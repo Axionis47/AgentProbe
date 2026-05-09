@@ -15,7 +15,11 @@ import pytest
 
 from app.api.v1.conversations import (
     _shape_chroma_matches,
+    get_conversation,
+    get_conversation_evaluations,
+    get_conversation_metrics,
     get_similar_conversations,
+    list_conversations,
 )
 from app.core.exceptions import NotFoundError
 
@@ -226,3 +230,155 @@ async def test_skips_matches_whose_db_row_is_gone(monkeypatch):
         db=db,
     )
     assert [item.conversation.id for item in out.items] == ["a"]
+
+
+# ---------------------------------------------------------------------------
+# list_conversations
+# ---------------------------------------------------------------------------
+
+
+def _mock_list_db(items: list, total: int | None = None):
+    """Build a MagicMock that simulates db.execute for a list+count query."""
+    if total is None:
+        total = len(items)
+    db = MagicMock()
+    count_result = MagicMock()
+    count_result.scalar_one = MagicMock(return_value=total)
+
+    list_result = MagicMock()
+    scalars = MagicMock()
+    scalars.all = MagicMock(return_value=items)
+    list_result.scalars = MagicMock(return_value=scalars)
+
+    # The handler calls db.execute(count_query) first, then db.execute(query).
+    db.execute = AsyncMock(side_effect=[count_result, list_result])
+    return db
+
+
+@pytest.mark.asyncio
+async def test_list_conversations_returns_empty_when_none():
+    db = _mock_list_db(items=[], total=0)
+    out = await list_conversations(
+        eval_run_id=None, status=None, offset=0, limit=20, db=db
+    )
+    assert out.total == 0
+    assert out.items == []
+
+
+@pytest.mark.asyncio
+async def test_list_conversations_returns_paginated_items():
+    rows = [_make_conv_row(f"c{i}") for i in range(3)]
+    db = _mock_list_db(items=rows, total=10)
+
+    out = await list_conversations(
+        eval_run_id="run-1", status="completed", offset=0, limit=3, db=db
+    )
+
+    assert out.total == 10
+    assert out.offset == 0
+    assert out.limit == 3
+    assert [c.id for c in out.items] == ["c0", "c1", "c2"]
+
+
+# ---------------------------------------------------------------------------
+# get_conversation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_conversation_returns_row():
+    row = _make_conv_row("c1")
+    db = MagicMock()
+    result = MagicMock()
+    result.scalar_one_or_none = MagicMock(return_value=row)
+    db.execute = AsyncMock(return_value=result)
+
+    out = await get_conversation(conv_id="c1", db=db)
+    assert out.id == "c1"
+
+
+@pytest.mark.asyncio
+async def test_get_conversation_raises_when_missing():
+    db = MagicMock()
+    result = MagicMock()
+    result.scalar_one_or_none = MagicMock(return_value=None)
+    db.execute = AsyncMock(return_value=result)
+
+    with pytest.raises(NotFoundError):
+        await get_conversation(conv_id="missing", db=db)
+
+
+# ---------------------------------------------------------------------------
+# get_conversation_evaluations & get_conversation_metrics
+# ---------------------------------------------------------------------------
+
+
+def _make_eval_row(eval_id: str = "e1"):
+    return SimpleNamespace(
+        id=eval_id,
+        conversation_id="c1",
+        evaluator_type="model_judge",
+        evaluator_id=None,
+        rubric_id=None,
+        scores={"helpfulness": 9.0},
+        overall_score=9.0,
+        reasoning="great",
+        per_turn_scores=None,
+        metadata_={},
+        created_at=datetime.now(timezone.utc),
+    )
+
+
+def _make_metric_row(metric_name: str = "tokens"):
+    return SimpleNamespace(
+        id="m1",
+        conversation_id="c1",
+        metric_name=metric_name,
+        value=42.0,
+        unit=None,
+        metadata_={},
+        created_at=datetime.now(timezone.utc),
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_conversation_evaluations_returns_items():
+    db = MagicMock()
+    result = MagicMock()
+    scalars = MagicMock()
+    scalars.all = MagicMock(return_value=[_make_eval_row(), _make_eval_row("e2")])
+    result.scalars = MagicMock(return_value=scalars)
+    db.execute = AsyncMock(return_value=result)
+
+    out = await get_conversation_evaluations(conv_id="c1", db=db)
+    assert out.total == 2
+
+
+@pytest.mark.asyncio
+async def test_get_conversation_evaluations_returns_empty_for_unknown_conv():
+    db = MagicMock()
+    result = MagicMock()
+    scalars = MagicMock()
+    scalars.all = MagicMock(return_value=[])
+    result.scalars = MagicMock(return_value=scalars)
+    db.execute = AsyncMock(return_value=result)
+
+    out = await get_conversation_evaluations(conv_id="ghost", db=db)
+    assert out.total == 0
+    assert out.items == []
+
+
+@pytest.mark.asyncio
+async def test_get_conversation_metrics_orders_by_name():
+    db = MagicMock()
+    result = MagicMock()
+    scalars = MagicMock()
+    scalars.all = MagicMock(
+        return_value=[_make_metric_row("a_metric"), _make_metric_row("b_metric")]
+    )
+    result.scalars = MagicMock(return_value=scalars)
+    db.execute = AsyncMock(return_value=result)
+
+    out = await get_conversation_metrics(conv_id="c1", db=db)
+    assert out.total == 2
+    assert [m.metric_name for m in out.items] == ["a_metric", "b_metric"]
