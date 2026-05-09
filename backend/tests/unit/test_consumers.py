@@ -249,3 +249,105 @@ async def test_embed_conversation_no_op_when_row_missing(monkeypatch):
 
     fake_llm.embed.assert_not_awaited()
     fake_collection.add.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# EvaluationCompletedConsumer — Chroma score backfill
+# ---------------------------------------------------------------------------
+
+
+def test_update_chroma_score_writes_per_evaluator_slot(monkeypatch):
+    from app.pipeline.consumers import evaluation_consumer as mod
+
+    fake_collection = MagicMock()
+    monkeypatch.setattr(
+        mod.ChromaDBClient, "get_conversations_collection", lambda: fake_collection
+    )
+
+    mod._update_chroma_score(
+        conversation_id="conv-1",
+        evaluator_type="model_judge",
+        overall_score=8.5,
+    )
+
+    fake_collection.update.assert_called_once()
+    kwargs = fake_collection.update.call_args.kwargs
+    assert kwargs["ids"] == ["conv-1"]
+    assert kwargs["metadatas"] == [{"score_model_judge": 8.5}]
+
+
+def test_update_chroma_score_no_op_on_missing_fields(monkeypatch):
+    from app.pipeline.consumers import evaluation_consumer as mod
+
+    fake_collection = MagicMock()
+    monkeypatch.setattr(
+        mod.ChromaDBClient, "get_conversations_collection", lambda: fake_collection
+    )
+
+    mod._update_chroma_score(conversation_id="", evaluator_type="x", overall_score=1.0)
+    mod._update_chroma_score(conversation_id="c", evaluator_type="", overall_score=1.0)
+    mod._update_chroma_score(conversation_id="c", evaluator_type="x", overall_score=None)
+
+    fake_collection.update.assert_not_called()
+
+
+def test_evaluation_consumer_handle_event_calls_chroma_then_aggregate(monkeypatch):
+    from app.pipeline.consumers import evaluation_consumer as mod
+
+    update_called = MagicMock()
+    monkeypatch.setattr(mod, "_update_chroma_score", update_called)
+
+    async def fake_aggregate(self, run_id):
+        fake_aggregate.called_with = run_id
+
+    monkeypatch.setattr(
+        mod.EvaluationCompletedConsumer, "_check_and_aggregate", fake_aggregate
+    )
+
+    consumer = mod.EvaluationCompletedConsumer()
+    envelope = EventEnvelope(
+        version=1,
+        event_type="evaluation.score.completed",
+        payload={
+            "eval_run_id": "run-1",
+            "conversation_id": "conv-7",
+            "evaluator_type": "rubric_grader",
+            "overall_score": 6.4,
+        },
+    )
+
+    consumer.handle_event(envelope)
+
+    update_called.assert_called_once_with(
+        conversation_id="conv-7",
+        evaluator_type="rubric_grader",
+        overall_score=6.4,
+    )
+    assert fake_aggregate.called_with == "run-1"
+
+
+def test_evaluation_consumer_aggregates_even_when_chroma_update_blows_up(monkeypatch):
+    from app.pipeline.consumers import evaluation_consumer as mod
+
+    def boom(**_kwargs):
+        raise RuntimeError("chroma is down")
+
+    monkeypatch.setattr(mod, "_update_chroma_score", boom)
+
+    async def fake_aggregate(self, run_id):
+        fake_aggregate.called_with = run_id
+
+    monkeypatch.setattr(
+        mod.EvaluationCompletedConsumer, "_check_and_aggregate", fake_aggregate
+    )
+
+    consumer = mod.EvaluationCompletedConsumer()
+    consumer.handle_event(
+        EventEnvelope(
+            version=1,
+            event_type="evaluation.score.completed",
+            payload={"eval_run_id": "run-1", "conversation_id": "c", "evaluator_type": "x", "overall_score": 1.0},
+        )
+    )
+
+    assert fake_aggregate.called_with == "run-1"

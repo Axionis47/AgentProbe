@@ -1,4 +1,13 @@
-"""Consumes EvaluationScoreCompleted events and triggers metric aggregation."""
+"""Consumes EvaluationScoreCompleted events.
+
+Two side effects per event:
+
+1. Backfill the score onto the conversation's Chroma record so the
+   similarity-search API can filter by quality (e.g. "find similar
+   conversations that scored below 6 on model_judge").
+2. If this was the last conversation to finish evaluating in the run,
+   roll up metrics and mark the run completed.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +17,7 @@ from datetime import datetime, timezone
 import structlog
 from sqlalchemy import func, select
 
+from app.db.chromadb_client import ChromaDBClient
 from app.db.session import async_session_factory
 from app.evaluation.aggregation import aggregate_metric_values
 from app.models.conversation import Conversation
@@ -23,18 +33,31 @@ logger = structlog.get_logger()
 
 
 class EvaluationCompletedConsumer(BaseConsumer):
-    """Checks if all conversations in a run are evaluated, then aggregates metrics."""
+    """Backfills Chroma metadata then checks for run completion."""
 
     def __init__(self) -> None:
         super().__init__(topic=EVALUATION_SCORE_COMPLETED)
 
     def handle_event(self, envelope: EventEnvelope) -> None:
-        """Check completion and aggregate metrics if all conversations are evaluated."""
         payload = envelope.payload
         eval_run_id = payload.get("eval_run_id")
 
         if not eval_run_id:
             return
+
+        # Best-effort metadata update on the Chroma record.
+        try:
+            _update_chroma_score(
+                conversation_id=str(payload.get("conversation_id", "")),
+                evaluator_type=str(payload.get("evaluator_type", "")),
+                overall_score=payload.get("overall_score"),
+            )
+        except Exception as exc:  # noqa: BLE001 - similarity is a side feature
+            logger.warning(
+                "chroma_score_update_failed",
+                conversation_id=payload.get("conversation_id"),
+                error=str(exc),
+            )
 
         asyncio.run(self._check_and_aggregate(str(eval_run_id)))
 
@@ -135,3 +158,30 @@ class EvaluationCompletedConsumer(BaseConsumer):
                 producer.flush(timeout=5.0)
             except Exception as e:
                 logger.error("metrics_aggregation_publish_failed", error=str(e))
+
+
+def _update_chroma_score(
+    conversation_id: str,
+    evaluator_type: str,
+    overall_score: float | int | None,
+) -> None:
+    """Tag the conversation's Chroma record with this evaluator's score.
+
+    Stores under metadata key ``score_<evaluator_type>`` so the API can filter
+    by any evaluator independently. Multiple events per conversation just
+    overwrite their own slot. Skips silently if any required field is missing.
+    """
+    if not conversation_id or not evaluator_type or overall_score is None:
+        return
+
+    collection = ChromaDBClient.get_conversations_collection()
+    collection.update(
+        ids=[conversation_id],
+        metadatas=[{f"score_{evaluator_type}": float(overall_score)}],
+    )
+    logger.debug(
+        "chroma_score_backfilled",
+        conversation_id=conversation_id,
+        evaluator=evaluator_type,
+        score=overall_score,
+    )
