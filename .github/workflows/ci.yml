@@ -42,7 +42,6 @@ jobs:
       AGENTPROBE_POSTGRES_PASSWORD: agentprobe
       AGENTPROBE_POSTGRES_DB: agentprobe
       AGENTPROBE_REDIS_URL: redis://localhost:6379/0
-      AGENTPROBE_LLM_PROVIDER: fake
 
     steps:
       - uses: actions/checkout@v4
