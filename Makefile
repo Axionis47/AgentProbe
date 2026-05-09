@@ -50,7 +50,7 @@ test-integration:
 	docker compose exec api pytest tests/integration -v
 
 test-e2e:
-	docker compose exec api pytest tests/e2e -v
+	pytest backend/tests/e2e -v -m e2e
 
 test-all:
 	docker compose exec api pytest --cov=app --cov-report=term-missing -v
