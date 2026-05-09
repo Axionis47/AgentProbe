@@ -1,0 +1,34 @@
+# Run with:
+#   pip install pre-commit && pre-commit install
+# Then every commit triggers these hooks.
+#
+# We intentionally keep this lightweight — the same real-bug ruff rules
+# CI uses, plus a guard against accidentally re-committing .DS_Store.
+# Heavier checks (mypy --strict, the full ruff ruleset) live in CI so
+# commits stay fast.
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      - id: ruff
+        name: ruff (real-bug rules)
+        args: ["--select=F,E9", "--fix", "backend/app", "backend/tests", "streamlit_app"]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+
+  - repo: local
+    hooks:
+      - id: no-ds-store
+        name: refuse to commit .DS_Store
+        entry: bash -c 'if git diff --cached --name-only | grep -E "\.DS_Store$"; then echo "Refusing to commit .DS_Store files. Add **/.DS_Store to .gitignore."; exit 1; fi'
+        language: system
+        always_run: true
+        pass_filenames: false
