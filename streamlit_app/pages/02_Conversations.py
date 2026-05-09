@@ -153,3 +153,67 @@ for tab, conv_summary in zip(tabs, convs):
                                 st.write(ev["reasoning"])
         except Exception as e:
             st.warning(f"Could not load evaluations: {e}")
+
+        # Similar conversations (powered by ChromaDB embedding search)
+        st.markdown("")
+        with st.expander("Similar conversations", expanded=False):
+            sim_cols = st.columns([1, 1, 1, 2])
+            with sim_cols[0]:
+                sim_limit = st.number_input(
+                    "Limit", min_value=1, max_value=20, value=5, key=f"sim_limit_{conv_id}"
+                )
+            with sim_cols[1]:
+                sim_same = st.checkbox(
+                    "Same scenario", value=False, key=f"sim_same_{conv_id}"
+                )
+            with sim_cols[2]:
+                sim_evaluator = st.selectbox(
+                    "Score by",
+                    options=["model_judge", "rubric_grader", "trajectory"],
+                    key=f"sim_eval_{conv_id}",
+                )
+
+            try:
+                sim = client.get_similar_conversations(
+                    conv_id=conv_id,
+                    limit=int(sim_limit),
+                    same_scenario=bool(sim_same),
+                    score_evaluator=sim_evaluator,
+                )
+                items = sim.get("items", [])
+                if not items:
+                    st.write("No similar conversations yet — embeddings build up as more runs complete.")
+                else:
+                    for it in items:
+                        c = it["conversation"]
+                        meta = it.get("metadata", {})
+                        agent = agent_names.get(
+                            runs[0].get("agent_config_id") if runs else "",
+                            "",
+                        )
+                        # Look up agent + scenario for the matched run via cached run data
+                        run_summary = next(
+                            (r for r in runs if r["id"] == c["eval_run_id"]),
+                            None,
+                        )
+                        if run_summary:
+                            agent_label = agent_names.get(
+                                run_summary.get("agent_config_id", ""), "?"
+                            )
+                            scen_label = scenario_names.get(
+                                run_summary.get("scenario_id", ""), "?"
+                            )
+                        else:
+                            agent_label = "?"
+                            scen_label = "?"
+                        sim_pct = f"{it['similarity'] * 100:.0f}%"
+                        score_key = f"score_{sim_evaluator}"
+                        score_display = (
+                            f"{meta[score_key]:.1f}/10" if score_key in meta else "—"
+                        )
+                        st.write(
+                            f"**{sim_pct}** · {agent_label} / {scen_label} · "
+                            f"score: {score_display} · `{c['id'][:8]}…`"
+                        )
+            except Exception as e:
+                st.warning(f"Could not load similar conversations: {e}")

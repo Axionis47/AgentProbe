@@ -81,6 +81,28 @@ class AgentProbeClient:
         r.raise_for_status()
         return r.json()
 
+    def get_similar_conversations(
+        self,
+        conv_id: str,
+        limit: int = 5,
+        same_scenario: bool = False,
+        min_score: float | None = None,
+        max_score: float | None = None,
+        score_evaluator: str = "model_judge",
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {
+            "limit": limit,
+            "same_scenario": str(same_scenario).lower(),
+            "score_evaluator": score_evaluator,
+        }
+        if min_score is not None:
+            params["min_score"] = min_score
+        if max_score is not None:
+            params["max_score"] = max_score
+        r = self.client.get(self._url(f"/conversations/{conv_id}/similar"), params=params)
+        r.raise_for_status()
+        return r.json()
+
     # Evaluations
     def create_human_evaluation(self, data: dict[str, Any]) -> dict[str, Any]:
         r = self.client.post(self._url("/evaluations/human"), json=data)
