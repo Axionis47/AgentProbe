@@ -111,7 +111,6 @@ class RubricGraderEvaluator:
         # Check for contradictions (very rough — count negation patterns)
         contradictions = 0
         for i in range(1, len(assistant_turns)):
-            prev = assistant_turns[i - 1].get("content", "").lower()
             curr = assistant_turns[i].get("content", "").lower()
             if ("actually" in curr and "not" in curr) or ("sorry" in curr and "wrong" in curr):
                 contradictions += 1
