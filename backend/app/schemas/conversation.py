@@ -29,3 +29,22 @@ class ConversationListResponse(BaseModel):
     offset: int
     limit: int
     items: list[ConversationResponse]
+
+
+class SimilarConversationItem(BaseModel):
+    """One conversation in a similarity-search response.
+
+    `similarity` is in [0, 1] where 1 is identical (cosine similarity flipped
+    from Chroma's distance). `metadata` carries the per-evaluator scores that
+    the evaluation_consumer backfills, so callers can sort/filter without a
+    second hop to the evaluations table.
+    """
+
+    conversation: ConversationResponse
+    similarity: float
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class SimilarConversationsResponse(BaseModel):
+    source_conversation_id: str
+    items: list[SimilarConversationItem]
