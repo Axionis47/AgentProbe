@@ -351,3 +351,149 @@ def test_evaluation_consumer_aggregates_even_when_chroma_update_blows_up(monkeyp
     )
 
     assert fake_aggregate.called_with == "run-1"
+
+
+def test_evaluation_consumer_skips_when_eval_run_id_missing(monkeypatch):
+    from app.pipeline.consumers import evaluation_consumer as mod
+
+    update_mock = MagicMock()
+    monkeypatch.setattr(mod, "_update_chroma_score", update_mock)
+
+    aggregate_called = MagicMock()
+    monkeypatch.setattr(
+        mod.EvaluationCompletedConsumer, "_check_and_aggregate", aggregate_called
+    )
+
+    consumer = mod.EvaluationCompletedConsumer()
+    consumer.handle_event(
+        EventEnvelope(
+            version=1,
+            event_type="evaluation.score.completed",
+            payload={},  # no eval_run_id
+        )
+    )
+
+    update_mock.assert_not_called()
+    aggregate_called.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# MetricsAggregatedConsumer
+# ---------------------------------------------------------------------------
+
+
+def test_metrics_consumer_skips_when_eval_run_id_missing(monkeypatch):
+    from app.pipeline.consumers import metrics_consumer as mod
+
+    mark_mock = MagicMock()
+    monkeypatch.setattr(
+        mod.MetricsAggregatedConsumer, "_mark_completed", mark_mock
+    )
+
+    consumer = mod.MetricsAggregatedConsumer()
+    consumer.handle_event(
+        EventEnvelope(
+            version=1,
+            event_type="metrics.aggregated",
+            payload={},
+        )
+    )
+    mark_mock.assert_not_called()
+
+
+def test_metrics_consumer_handle_event_calls_mark_completed(monkeypatch):
+    from app.pipeline.consumers import metrics_consumer as mod
+
+    captured = {}
+
+    async def fake_mark(self, run_id):
+        captured["run_id"] = run_id
+
+    monkeypatch.setattr(mod.MetricsAggregatedConsumer, "_mark_completed", fake_mark)
+
+    consumer = mod.MetricsAggregatedConsumer()
+    consumer.handle_event(
+        EventEnvelope(
+            version=1,
+            event_type="metrics.aggregated",
+            payload={"eval_run_id": "run-42"},
+        )
+    )
+    assert captured["run_id"] == "run-42"
+
+
+@pytest.mark.asyncio
+async def test_mark_completed_sets_status_when_running(monkeypatch):
+    from app.pipeline.consumers import metrics_consumer as mod
+
+    fake_run = SimpleNamespace(
+        id="run-1", status="running_evaluation", completed_at=None
+    )
+
+    fake_session = MagicMock()
+    fake_session.__aenter__ = AsyncMock(return_value=fake_session)
+    fake_session.__aexit__ = AsyncMock(return_value=False)
+
+    result = MagicMock()
+    result.scalar_one_or_none = MagicMock(return_value=fake_run)
+    fake_session.execute = AsyncMock(return_value=result)
+    fake_session.commit = AsyncMock()
+
+    monkeypatch.setattr(mod, "async_session_factory", lambda: fake_session)
+
+    consumer = mod.MetricsAggregatedConsumer()
+    await consumer._mark_completed("run-1")
+
+    assert fake_run.status == "completed"
+    assert fake_run.completed_at is not None
+    fake_session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_mark_completed_no_op_when_already_completed(monkeypatch):
+    """Don't double-set completed_at if another consumer already did."""
+    from app.pipeline.consumers import metrics_consumer as mod
+    from datetime import datetime, timezone
+
+    original_completion = datetime.now(timezone.utc)
+    fake_run = SimpleNamespace(
+        id="run-1", status="completed", completed_at=original_completion
+    )
+
+    fake_session = MagicMock()
+    fake_session.__aenter__ = AsyncMock(return_value=fake_session)
+    fake_session.__aexit__ = AsyncMock(return_value=False)
+
+    result = MagicMock()
+    result.scalar_one_or_none = MagicMock(return_value=fake_run)
+    fake_session.execute = AsyncMock(return_value=result)
+    fake_session.commit = AsyncMock()
+
+    monkeypatch.setattr(mod, "async_session_factory", lambda: fake_session)
+
+    consumer = mod.MetricsAggregatedConsumer()
+    await consumer._mark_completed("run-1")
+
+    assert fake_run.completed_at == original_completion
+    fake_session.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_mark_completed_warns_on_missing_run(monkeypatch):
+    from app.pipeline.consumers import metrics_consumer as mod
+
+    fake_session = MagicMock()
+    fake_session.__aenter__ = AsyncMock(return_value=fake_session)
+    fake_session.__aexit__ = AsyncMock(return_value=False)
+
+    result = MagicMock()
+    result.scalar_one_or_none = MagicMock(return_value=None)
+    fake_session.execute = AsyncMock(return_value=result)
+    fake_session.commit = AsyncMock()
+
+    monkeypatch.setattr(mod, "async_session_factory", lambda: fake_session)
+
+    consumer = mod.MetricsAggregatedConsumer()
+    await consumer._mark_completed("ghost")
+
+    fake_session.commit.assert_not_awaited()
