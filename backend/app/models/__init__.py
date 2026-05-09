@@ -6,7 +6,6 @@ from app.models.evaluation import Evaluation
 from app.models.metric import Metric
 from app.models.rubric import Rubric
 from app.models.scenario import Scenario
-from app.models.user import User
 
 __all__ = [
     "Base",
@@ -17,5 +16,4 @@ __all__ = [
     "Conversation",
     "Evaluation",
     "Metric",
-    "User",
 ]

@@ -36,11 +36,6 @@ class EvalRun(Base):
     error_message: Mapped[str | None] = mapped_column(Text)
     started_at: Mapped[datetime | None] = mapped_column()
     completed_at: Mapped[datetime | None] = mapped_column()
-    created_by: Mapped[str | None] = mapped_column(
-        UUID(as_uuid=False),
-        ForeignKey("users.id"),
-        nullable=True,
-    )
 
     # Relationships
     agent_config: Mapped["AgentConfig"] = relationship(  # type: ignore[name-defined]  # noqa: F821
