@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engine.adversarial import AdversarialStrategy, NoOpAdversarial
 from app.engine.environment import SimulationEnvironment
-from app.engine.llm_client import LLMClient
+from app.engine.llm_client import make_llm_client
 from app.engine.persona import AgentPersona, UserPersona
 from app.engine.scenario_runner import ScenarioRunner
 from app.engine.tool_simulator import ToolSimulator
@@ -34,7 +34,7 @@ class AgentSimulationService:
 
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
-        self.llm_client = LLMClient()
+        self.llm_client = make_llm_client()
         # Pending Kafka events — emitted by the caller AFTER DB commit
         self.pending_kafka_events: list[tuple[str, object, str]] = []
 

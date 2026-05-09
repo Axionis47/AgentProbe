@@ -83,7 +83,7 @@ async def create_pairwise_comparison(
     db: AsyncSession = Depends(get_db),
 ) -> PairwiseComparisonResponse:
     """Run a pairwise comparison between two conversations."""
-    from app.engine.llm_client import LLMClient
+    from app.engine.llm_client import make_llm_client
     from app.evaluation.pairwise_judge import PairwiseJudgeEvaluator
     from app.evaluation.types import DEFAULT_DIMENSIONS, RubricDimension
     from app.models.rubric import Rubric
@@ -118,7 +118,7 @@ async def create_pairwise_comparison(
             ]
 
     # Run comparison
-    evaluator = PairwiseJudgeEvaluator(llm_client=LLMClient())
+    evaluator = PairwiseJudgeEvaluator(llm_client=make_llm_client())
     comparison = await evaluator.compare(
         conv_a.turns or [], conv_b.turns or [], dimensions,
     )

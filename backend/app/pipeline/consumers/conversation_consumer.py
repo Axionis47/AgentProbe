@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.chromadb_client import ChromaDBClient
 from app.db.session import async_session_factory
-from app.engine.llm_client import LLMClient
+from app.engine.llm_client import make_llm_client
 from app.models.conversation import Conversation
 from app.models.eval_run import EvalRun
 from app.pipeline.consumers.base import BaseConsumer
@@ -82,7 +82,7 @@ async def _embed_conversation(conversation_id: str) -> None:
             logger.debug("embedding_skipped_empty_text", conversation_id=conversation_id)
             return
 
-    llm = LLMClient()
+    llm = make_llm_client()
     vector = await llm.embed(text)
 
     collection = ChromaDBClient.get_conversations_collection()

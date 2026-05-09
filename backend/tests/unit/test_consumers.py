@@ -168,7 +168,7 @@ async def test_embed_conversation_writes_to_chroma(monkeypatch):
 
     fake_llm = MagicMock()
     fake_llm.embed = AsyncMock(return_value=[0.1, 0.2, 0.3])
-    monkeypatch.setattr(mod, "LLMClient", lambda: fake_llm)
+    monkeypatch.setattr(mod, "make_llm_client", lambda: fake_llm)
 
     fake_collection = MagicMock()
     monkeypatch.setattr(
@@ -209,7 +209,7 @@ async def test_embed_conversation_no_op_when_text_empty(monkeypatch):
 
     fake_llm = MagicMock()
     fake_llm.embed = AsyncMock()
-    monkeypatch.setattr(mod, "LLMClient", lambda: fake_llm)
+    monkeypatch.setattr(mod, "make_llm_client", lambda: fake_llm)
 
     fake_collection = MagicMock()
     monkeypatch.setattr(
@@ -238,7 +238,7 @@ async def test_embed_conversation_no_op_when_row_missing(monkeypatch):
 
     fake_llm = MagicMock()
     fake_llm.embed = AsyncMock()
-    monkeypatch.setattr(mod, "LLMClient", lambda: fake_llm)
+    monkeypatch.setattr(mod, "make_llm_client", lambda: fake_llm)
 
     fake_collection = MagicMock()
     monkeypatch.setattr(

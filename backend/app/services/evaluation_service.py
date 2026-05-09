@@ -11,7 +11,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.engine.llm_client import LLMClient
+from app.engine.llm_client import make_llm_client
 from app.evaluation.automated_metrics import AutomatedMetricsCalculator
 from app.evaluation.model_judge import ModelJudgeEvaluator
 from app.evaluation.rubric_grader import RubricGraderEvaluator
@@ -31,7 +31,7 @@ class EvaluationService:
 
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
-        self.llm_client = LLMClient()
+        self.llm_client = make_llm_client()
 
     async def evaluate_conversation(
         self,

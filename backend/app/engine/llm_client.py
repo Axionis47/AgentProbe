@@ -212,6 +212,92 @@ class LLMClient:
         return list(vector)
 
 
+class FakeLLMClient:
+    """Deterministic LLM stand-in for offline tests and CI.
+
+    Returns canned content (and optionally a tool call) without hitting any
+    network. Selected at runtime when ``settings.llm_provider == "fake"``;
+    otherwise the real ``LLMClient`` is used.
+
+    Behaviour:
+    - ``chat`` returns a short acknowledgement of the last user message. If
+      ``tools`` is non-empty, the first turn returns a tool call to the first
+      tool with empty arguments — enough for the trajectory evaluator to score
+      the conversation as "called the tool".
+    - ``embed`` returns a hash-based 16-dimensional vector — same input always
+      maps to the same vector, different inputs to different vectors.
+
+    The contract is exactly the same as ``LLMClient`` so the rest of the engine
+    doesn't know which one it's talking to.
+    """
+
+    def __init__(self) -> None:
+        self._call_index: int = 0
+
+    async def chat(
+        self,
+        model: str,
+        messages: list[dict[str, Any]],
+        system: str | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+    ) -> LLMResponse:
+        last_user = next(
+            (m["content"] for m in reversed(messages) if m.get("role") == "user"),
+            "",
+        )
+        # First turn with tools available: emit one tool call to keep the
+        # trajectory-evaluator path exercised. Subsequent turns are plain text.
+        emit_tool = tools and self._call_index == 0
+        self._call_index += 1
+
+        tool_calls: list[ToolCall] = []
+        content: str
+        if emit_tool:
+            first_tool = tools[0]
+            tool_name = (
+                first_tool.get("name")
+                or first_tool.get("function", {}).get("name")
+                or "noop"
+            )
+            tool_calls = [
+                ToolCall(id=f"fake_call_{self._call_index}", name=tool_name, arguments={})
+            ]
+            content = ""
+        else:
+            content = f"Acknowledged: {last_user[:80]}"
+
+        return LLMResponse(
+            content=content,
+            tool_calls=tool_calls,
+            input_tokens=max(1, len(last_user) // 4),
+            output_tokens=max(1, len(content) // 4),
+            model="fake",
+            stop_reason="tool_use" if tool_calls else "end_turn",
+        )
+
+    async def embed(self, text: str, model: str | None = None) -> list[float]:
+        # Hash-based deterministic vector. Length 16 — enough for cosine similarity
+        # to be meaningful, small enough to keep test fixtures readable.
+        import hashlib
+
+        digest = hashlib.sha256(text.encode("utf-8")).digest()
+        return [(b - 128) / 128.0 for b in digest[:16]]
+
+
+def make_llm_client() -> Any:
+    """Return the right LLM client for the current environment.
+
+    Anything other than the literal string 'fake' for ``llm_provider`` gets the
+    real ``LLMClient``. Centralising this means tests, scripts, and CI all flip
+    behaviour with one env var.
+    """
+    if settings.llm_provider == "fake":
+        return FakeLLMClient()
+    return LLMClient()
+
+
 def _extract_tool_calls(message: Any) -> list[ToolCall]:
     """Extract and normalize tool calls from any provider's response.
 
