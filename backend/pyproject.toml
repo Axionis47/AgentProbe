@@ -19,7 +19,7 @@ dependencies = [
     # Kafka
     "confluent-kafka>=2.6.0",
     # ChromaDB
-    "chromadb>=0.5.0",
+    "chromadb>=1.0.0,<2.0.0",
     # Celery
     "celery[redis]>=5.4.0",
     # AI — model-agnostic via LiteLLM (supports Ollama, Claude, OpenAI, Gemini)
